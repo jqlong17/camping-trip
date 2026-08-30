@@ -12,3 +12,8 @@
 706536__that_finn__light-ceramic-cling.ogg — cup (that_finn)
 
 345230__liferecorded_archive__ceiling-fan-indoor.wav — fan (liferecorded_archive)
+
+--- ambience ---
+790994__guillermo_de_la_matera__…abasto-forest.wav — amb_birds (guillermo_de_la_matera)
+479041__felixblume__crickets-during-the-night….wav — amb_crickets (felixblume)
+741686__robertcrosley__small-tributary….wav — amb_creek (robertcrosley)

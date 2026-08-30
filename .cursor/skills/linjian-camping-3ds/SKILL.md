@@ -18,6 +18,7 @@ disable-model-invocation: false
 2. [docs/动画与交互-SPEC.md](docs/动画与交互-SPEC.md) — 四向精灵 / 道具仪式  
 3. [项目背景.md](项目背景.md) — 真机踩坑  
 4. [docs/怎么玩.md](docs/怎么玩.md) — 操作与自测  
+5. [linjian-pixel-style](../linjian-pixel-style/SKILL.md) — 运行时 PNG 必须是 16-bit 硬像素  
 
 仓库根：`/Users/ruska/projects/3ds/linjian`
 
@@ -30,7 +31,7 @@ disable-model-invocation: false
 | 分辨率 | 上屏 400×240；下屏 320×240；桌面纵向叠屏 |
 | 部署 | `./scripts/deploy-to-sd.sh` → SD 同步 `3dsx+game/` **并自动打 `linjian.cia`**（FBI 安装）；日常热更可用 `--no-cia` |
 | 语言 | 对用户回复 **中文** |
-| 像素 | nearest 过滤；**可读优先**；禁止强模糊旧屏糊化；角色大色块少噪点 |
+| 像素 | nearest；**16-bit 硬像素**；禁止写实/厚涂进 `game/assets`；改图后跑 `scripts/audit-pixel-style.py` |
 | 自测 | 每次玩法/美术改完必须 `love game --playtest` → 日志 `PASS` |
 
 ## 整局流程（不可跳过场景）
@@ -58,8 +59,8 @@ title → prologue → cast → depart → play → homecoming → title
 
 ### 分镜管线
 
-文生图 → cover **400×240** LANCZOS → 极轻 posterize → `game/assets/story/`。  
-**禁止**先砸到百像素再糊化放大。
+文生图 → cover 400×240 → 可 200×120 再 ×2 nearest → 限色 32–48 → `audit-pixel-style.py` → `game/assets/story/`。  
+**禁止**写实厚涂原样进游戏；**禁止**高斯模糊旧屏化。
 
 ## 营地细节水位（持续加）
 
@@ -69,7 +70,8 @@ title → prologue → cast → depart → play → homecoming → title
 2. 帐篷开合在地图可见  
 3. 手冲 **三步仪式画面** + 地图冲煮台/蒸汽  
 4. 小锅/钓鱼轻反馈  
-5. 夜里点灯（已有则保留）
+5. 夜里点灯（已有则保留）  
+6. 夜晚：星星 / 流星 / 萤火虫 / 树叶随风（色罩之后画）
 
 仪式用 `ritual` 叠加态，不要只 toast。
 
@@ -78,9 +80,10 @@ title → prologue → cast → depart → play → homecoming → title
 ```
 1. 读 SPEC §12 最新 DEV + 相关章节
 2. 改 game/ 与资产
-3. love game --playtest
-4. 确认 PASS 与截图
-5. 写 DEV-XXX；必要时更新 怎么玩.md / 动画 SPEC
+3. 若动了 PNG：python3 scripts/audit-pixel-style.py
+4. love game --playtest
+5. 确认 PASS 与截图
+6. 写 DEV-XXX；必要时更新 怎么玩.md / 动画 SPEC
 ```
 
 ## 真机注意（摘要）

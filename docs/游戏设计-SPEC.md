@@ -93,11 +93,11 @@ flowchart TD
 
 - 用途：序章 / 出发 / 回家的**情绪过场**，不是营地玩法贴图。  
 - 画幅：按 3DS 上屏约 **400×240（≈5:3）** 构图。  
-- **风格锚点（已拍板）**：题材/构图可参考 `docs/storyboards/style_ref_desired.jpg`，但**最终过场必须更「旧」、更糊、块更大**——像早期 3DS/GBA 屏，不要现代独立游戏那种清晰 HD pixel。  
-  - 要：低信息密度、限色、旧 LCD 渗色、nearest 放大后的大色块。  
-  - 不要：锐利边缘、高清插画、过度细腻的现代像素。  
-  - 管线：文生图原图 → cover 裁到 **400×240**（LANCZOS）→ 极轻 posterize；**可读优先，禁止模糊 / 禁止先砸到百像素再放大**。  
-  - 进游戏用 `game/assets/story/*.png`。
+- **风格锚点（已拍板 · DEV-036）**：运行时全是 **16-bit 硬像素**。题材可参考 `docs/storyboards/style_ref_desired.jpg` / `docs/mockups/`，**禁止把写实厚涂原样进游戏**。  
+  - 要：限色（全屏 ≤64 色）、大色块、nearest、一眼能认。  
+  - 不要：照片、体积光油画、高斯模糊、抗锯齿脏边。  
+  - 管线：构图可文生 → cover 到 400×240 → **可 200×120 再 ×2 nearest** → median-cut 32–48 色 → `scripts/audit-pixel-style.py` 通过才进 `game/assets/story/`。  
+  - Skill：`.cursor/skills/linjian-pixel-style/`。
 
 ### 3.1 营地内一日流程（play 段）
 
@@ -261,6 +261,7 @@ flowchart LR
 | BGM | **02 白天** | `audio/bgm_02_morning.mp3` | ✅ 已接入 | 「开始旅程」后营地白天循环（清晨～黄昏可共用这一首） |
 | BGM | **03 夜里** | `audio/bgm_03_night.mp3` | ✅ 已接入（《夜营灯光》） | 入夜 / 深夜循环；黎明切回白天曲 |
 | SFX | 见下表 | `audio/sfx_*.wav` | ✅ 清单齐 | UI / 脚步 / 帐篷 / 手冲 / 杯子 / 扇子 / 点灯 |
+| 环境音 | 鸟 / 虫 / 溪 | `audio/amb_*.mp3` | ✅ 营地循环垫底 | 白天鸟鸣 · 夜里虫鸣 · 溪水常垫 |
 
 原先草案里的黄昏 / 回城 / 手冲专用 BGM / 次日曲 **全部取消**；氛围靠 **换 BGM + SFX + 光线** 即可。
 
@@ -284,6 +285,16 @@ flowchart LR
 | `sfx_cup` | 端杯 / 喝一小口反馈 | 瓷杯轻碰 | ✅ `sfx_cup.wav`（Freesound that_finn light-ceramic-cling） |
 | `sfx_lantern` | **点亮露营灯** | 咔嗒 + 极短暖嗡（仪式感） | ✅ `sfx_lantern.wav`（Freesound tbrook switch-light-06） |
 | `sfx_fan` | 扇一下（可选） | 短风声 | ✅ `sfx_fan.wav`（Freesound liferecorded_archive ceiling-fan，裁短淡出） |
+
+### 11.3b 环境氛围音（ambience · 营地垫底）
+
+长素材已裁成 **24～30 秒** 循环 MP3（mono / 22.05kHz / 64kbps），只在 `play` 与 BGM 叠播、音量更低：
+
+| ID | 文件 | 何时 | 来源 |
+|----|------|------|------|
+| `amb_birds` | `audio/amb_birds.mp3` | 营地白天（清晨～黄昏、黎明） | guillermo_de_la_matera 鸟鸣林 |
+| `amb_crickets` | `audio/amb_crickets.mp3` | 入夜 / 深夜 | felixblume 夜虫 |
+| `amb_creek` | `audio/amb_creek.mp3` | 营地全程垫溪水 | robertcrosley 小溪 |
 
 SFX **不必用 Suno**（不擅长短反馈音）。放入 `game/audio/`，P2 互动时挂上。
 
@@ -340,6 +351,7 @@ SFX **不必用 Suno**（不擅长短反馈音）。放入 `game/audio/`，P2 �
 | **DEV-015g** | 2026-08-30 | done | 接入 `sfx_cup`（that_finn ceramic cling）；手冲入杯/第一口、杯子道具 |
 | **DEV-015h** | 2026-08-30 | done | 接入 `sfx_fan`（ceiling-fan 裁短淡出）；扇风仪式开始与第 3 步 |
 | **DEV-015i** | 2026-08-30 | done | **SFX 自检**：发现 `sfx_fan` 曾导出为静音并修复；削波 UI/灯轻微压峰；清单 8 条均已加载且有触发 |
+| **DEV-015j** | 2026-08-30 | done | 营地环境音：`amb_birds` / `amb_crickets` / `amb_creek`（长素材裁 24～30s 循环）；白天鸟·夜里虫·溪水常垫 |
 | **DEV-019** | 2026-08-30 | done | 整局流程 §3.0；分镜风格：题材参考 `style_ref_desired.jpg`，**最终过场用强降采样旧屏版 `*_3ds.png`**（更糊、限色、大色块） |
 | **DEV-020** | 2026-08-30 | done | **完整周末环落地**：`prologue`→`cast`→`depart`→`play`→`homecoming`→标题；旧屏分镜 `assets/story/`；九人角色 `assets/cast/`；营地时段/光线罩/点灯/回家；playtest 全流程 PASS |
 | **DEV-021** | 2026-08-30 | done | 分镜可读修复：去掉强降采样+强模糊；改为 400×240 轻像素管线，重新导出 `assets/story/` |
@@ -349,6 +361,15 @@ SFX **不必用 Suno**（不擅长短反馈音）。放入 `game/audio/`，P2 �
 | **DEV-025** | 2026-08-30 | done | **营地美化**：蜿蜒可趟小溪、8 种树/灌木/花/芦苇、浅滩、偶尔小鱼跃出；清像素贴图替换 |
 | **DEV-026** | 2026-08-30 | done | **细节精修**：九人真四向走帧；手冲三步细像素特写；钓鱼/扇子 4 帧短动画仪式；playtest PASS |
 | **DEV-027** | 2026-08-30 | done | **标题首图重做**：上屏林间营地细像素风景；下屏羊皮纸菜单底；旧版备份 `title_*_v1.png` |
+| **DEV-028** | 2026-08-30 | done | **营地对标效果图**：统一草地亮度去棋盘；分层树冠+落影；河岸转角；水格同相位；帐篷/营火/树桩重切；`scripts/build-camp-tiles.py` |
+| **DEV-029** | 2026-08-30 | done | **对标复盘再修**：泥地空场、溪靠右+踏脚石+码头、树影偏右下、静水波、背包藤框羊皮纸；补字体「包」 |
+| **DEV-030** | 2026-08-30 | done | **分镜字幕**：台词与「按 A 继续」不再叠框，并入同一底栏 |
+| **DEV-031** | 2026-08-30 | done | **装备图鉴落地**：六件装备上屏说明 + 下屏点选翻页；B 返回；playtest `09_codex` |
+| **DEV-032** | 2026-08-30 | done | **关于页**：上屏作品说明 + 下屏周末要点；B 返回；playtest `10_about` |
+| **DEV-033** | 2026-08-30 | done | **营地生趣**：鱼跃更勤；三种鸟栖枝/落地/飞回；部分树有巢；蝶、蜻蜓、夜里萤火虫 |
+| **DEV-034** | 2026-08-30 | done | **手冲特写改像素**：三步改为 16-bit 大色块，×2 nearest，与营地/钓鱼扇子一致 |
+| **DEV-035** | 2026-08-30 | done | **夜晚氛围**：色罩后画硬像素星星/十字亮星、偶发流星拖尾、萤火虫亮点；树冠随风轻晃；落叶粒子；入夜提示「抬头有星星」 |
+| **DEV-036** | 2026-08-30 | done | **全局像素闸门**：扫描运行时素材；标题油画改 16-bit；草地/花/营火/手冲图标硬像素重绘；分镜限色；skill `linjian-pixel-style` + `scripts/audit-pixel-style.py` |
 | **DEV-012** | — | planned | **P1** 加深：更多时段事件（搭帐篷动画、手冲小游戏） |
 | **DEV-014** | — | planned | **P3** 精修回家：次日收拾动画、周末计数 |
 | **DEV-015** | 2026-08-30 | done | 基础 SFX 清单齐：UI + 脚步/帐篷/手冲/杯子/扇子/点灯 |

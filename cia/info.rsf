@@ -15,7 +15,7 @@ Option:
   FreeProductCode         : true # Removes limitations on ProductCode
   MediaFootPadding        : false # If true CCI files are created with padding
   EnableCrypt             : false # Enables encryption for NCCH and CIA
-  EnableCompress          : true # Compresses where applicable (currently only exefs:/.code)
+  EnableCompress          : false # LovePotion ELF 压缩后 FBI 可能校验失败
   
 AccessControlInfo:
   CoreVersion                   : 2
@@ -34,36 +34,11 @@ AccessControlInfo:
   # FS:USER Archive Access Permissions
   # Uncomment as required
   FileSystemAccess:
-   - CategorySystemApplication
-   - CategoryHardwareCheck
-   - CategoryFileSystemTool
    - Debug
-   - TwlCardBackup
-   - TwlNandData
-   - Boss
    - DirectSdmc
-   - Core
-   - CtrNandRo
-   - CtrNandRw
-   - CtrNandRoWrite
-   - CategorySystemSettings
-   - CardBoard
-   - ExportImportIvs
    - DirectSdmcWrite
-   - SwitchCleanup
-   - SaveDataMove
-   - Shop
-   - Shell
-   - CategoryHomeMenu
   IoAccessControl:
-   - FsMountNand
-   - FsMountNandRoWrite
-   - FsMountTwln
-   - FsMountWnand
-   - FsMountCardSpi
    - UseSdif3
-   - CreateSeed
-   - UseCardSpi
 
   # Process Settings
   MemoryType                    : Application # Application/System/Base
@@ -84,9 +59,9 @@ AccessControlInfo:
   SpecialMemoryArrange          : true
 
   # New3DS Exclusive Process Settings
-  SystemModeExt                 : Legacy # Legacy(Default)/124MB/178MB  Legacy:Use Old3DS SystemMode
-  CpuSpeed                      : 268MHz # 268MHz(Default)/804MHz
-  EnableL2Cache                 : false # false(default)/true
+  SystemModeExt                 : 124MB # Legacy(Default)/124MB/178MB  Legacy:Use Old3DS SystemMode
+  CpuSpeed                      : 804MHz # 268MHz(Default)/804MHz
+  EnableL2Cache                 : true # false(default)/true
   CanAccessCore2                : true 
 
   # Virtual Address Mappings

@@ -10,14 +10,14 @@ TOOLS="$ROOT/vendor/tools"
 ELF="$ROOT/vendor/lovepotion-3ds/lovepotion.elf"
 GAME="$ROOT/game"
 CIA_DIR="$ROOT/cia"
-OUT_DIR="$ROOT/dist/3ds/linjian"
+OUT_DIR="$ROOT/dist/3ds/CampingTrip"
 BUILD="$ROOT/build/cia"
-OUT_CIA="$OUT_DIR/linjian.cia"
+OUT_CIA="$OUT_DIR/CampingTrip.cia"
 
-APP_TITLE="Camping Trip"   # SMDH/CIA 英文短名（主画面）；中文名在 banner 图上
-APP_DESC="Linjian weekend camp"
-APP_AUTHOR="linjian"
-PRODUCT_CODE="CTR-H-LJIN"
+APP_TITLE="Camping Trip"   # SMDH 英文短名（主画面）；中文名在 banner 图上
+APP_DESC="Weekend camp in the woods"
+APP_AUTHOR="Camping Trip"
+PRODUCT_CODE="CTR-H-CAMP"
 UNIQUE_ID="0x4C4A"         # 须在 makerom 允许范围内（约 16-bit）
 
 [[ -f "$ELF" ]] || { echo "缺少 $ELF"; exit 1; }
@@ -31,8 +31,11 @@ mkdir -p "$BUILD" "$OUT_DIR"
 
 ROMFS="$BUILD/romfs"
 rm -rf "$ROMFS"
-mkdir -p "$ROMFS"
-rsync -a --delete --exclude '.DS_Store' "$GAME/" "$ROMFS/"
+mkdir -p "$ROMFS/game"
+# LovePotion 3.x 找旁边的 game/；CIA 的 RomFS 根对应 3dsx 所在目录
+rsync -a --delete --exclude '.DS_Store' "$GAME/" "$ROMFS/game/"
+# 旧 fused 约定也会看 RomFS 根上的 main.lua，两套同内容避免点图标直接退回
+rsync -a --exclude '.DS_Store' "$GAME/" "$ROMFS/"
 
 echo "→ banner / icon"
 "$TOOLS/bannertool" makebanner \
@@ -80,5 +83,5 @@ echo "→ makerom CIA"
 
 ls -lh "$OUT_CIA"
 echo "✓ CIA: $OUT_CIA"
-echo "  FBI：SD/cias/linjian.cia → Install CIA → 主画面「Camping Trip」/ banner 中文「露营之旅」。"
-echo "  热更新仍可用：改 game/ 后跑 deploy --no-cia，用 HB 菜单进 3ds/linjian。"
+echo "  FBI：SD/cias/CampingTrip.cia → Install CIA → 主画面「Camping Trip」/ banner「露营之旅」。"
+echo "  热更新：deploy --no-cia 后用 HB 打开 3ds/CampingTrip。"

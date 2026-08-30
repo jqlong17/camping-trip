@@ -3,7 +3,7 @@
 Nintendo 3DS 上的**休闲露营小游戏**（爱好向，不上架）。  
 一个夏天上班族周末逃进林间：搭帐篷、手冲咖啡、看河水从早到晚，夜里点起露营灯，第二天收拾行李回家——下一周再来，装备略有不同。
 
-工程目录名仍为 `linjian`（曾用名「林间一夜」）；**对玩家展示名称以「露营之旅」为准**。
+对玩家：**露营之旅** / **Camping Trip**。电脑仓库目录仍叫 `linjian`，真机 Homebrew 文件夹和 CIA 文件名用 `CampingTrip`，不再用拼音。
 
 ## 文档索引
 
@@ -15,11 +15,23 @@ Nintendo 3DS 上的**休闲露营小游戏**（爱好向，不上架）。
 | **[项目背景.md](./项目背景.md)** | 硬件/CFW、部署踩坑、给后续 Agent 的接续说明 |
 | `.cursor/skills/linjian-camping-3ds/` | 本项目 Agent Skill（约束与工作流） |
 | `game/` | 运行中的源码与资源（`main.lua`、`assets/`、`fonts/`） |
-| `dist/3ds/linjian/` | 可直接拷到 SD 的目录镜像 |
+| `dist/3ds/CampingTrip/` | 可直接拷到 SD 的目录镜像 |
 | **[docs/storyboards/](./docs/storyboards/)** | 序章/出发/回家分镜；进游戏用清晰 400×240 |
 | `vendor/` | LovePotion 3DS 预编译包 |
 
 > 清掉 Cursor 对话后：先读 **SPEC**，再读 **项目背景**。
+
+## Agent 记录准则
+
+这个项目已经多次遇到“真机现象和桌面结果完全不一致”的问题：PNG/T3X、LovePotion 音频、HOME Menu/CIA、FAT32 脏状态、营地性能都靠日志和文档才避免重复试错。任何 Agent 接手后，不能只在代码里修完就结束，必须把本轮新增事实、假设、验证命令、真机日志结论和后续判断口径写回文档。
+
+最低记录要求：
+
+1. 改玩法、性能、部署、真机兼容性后，更新 [docs/游戏设计-SPEC.md](./docs/游戏设计-SPEC.md) 的 DEV 日志。
+2. 真机加载、黑屏、音频、T3X、SD/FAT、CIA/Homebrew 相关经验，更新 [docs/3DS真机开发踩坑与发布准则.md](./docs/3DS真机开发踩坑与发布准则.md)。
+3. 会改变后续 Agent 工作方式的规则，同步更新 `.cursor/skills/linjian-camping-3ds/SKILL.md`。
+4. 每条结论要写清楚证据等级：桌面 playtest、SD 日志、真机现象、公开资料，还是推测。
+5. 部署到 SD 前后写明验证结果；插着卡时必须跑 `python3 scripts/verify-3ds-install.py --require-sd`，通过后再 `diskutil eject`。
 
 ## 体验摘要
 
@@ -49,30 +61,28 @@ love game
 
 ## 真机（SD 卡）
 
-**一键发版（同步 + 自动打 CIA）：**
+**一键部署（仅同步安全的 3DSX + game/）：**
 
 ```bash
 cd /Users/ruska/projects/3ds/linjian
 ./scripts/deploy-to-sd.sh
 ```
 
-会刷新 `3dsx + game/`，打包 **`linjian.cia`**，并拷到 SD 的 `3ds/linjian/` 与 `cias/linjian.cia`。
+会刷新 `3dsx + game/`，自动生成营地静态底图和 3DS 所需 T3X 纹理，并同步到 SD 的 `3ds/CampingTrip/`。默认不打包、不复制 CIA。
 
-- FBI：`cias/linjian.cia` → Install CIA → 主画面进入  
-- 日常热更（不重装 CIA）：`./scripts/deploy-to-sd.sh --no-cia`，用 HB 菜单打开 `3ds/linjian`  
-- 只打 CIA：`./scripts/build-cia.sh`
+- 日常测试：Homebrew 里选 **CampingTrip**。
+- 预检：`python3 scripts/verify-3ds-install.py --require-sd` 必须 `RESULT PASS`。
+- CIA：本项目日常停用；不要通过 FBI 安装 `CampingTrip.cia`，除非明确重新做单变量实验。
 
-旁路目录仍可用：
+旁路目录：
 
 ```
-sdmc:/3ds/linjian/
-  lovepotion.3dsx
+sdmc:/3ds/CampingTrip/
+  CampingTrip.3dsx
   game/
-  linjian.cia
-sdmc:/cias/linjian.cia
 ```
 
-1. 拷贝完成后**关机**再拔卡。  
+1. 电脑同步完成后必须 `diskutil eject "/Volumes/NO NAME"`，再拔卡。
 2. 详见 [项目背景.md](./项目背景.md)（Luma 需较新；需 `dspfirm.cdc`）。
 
 ## 风格

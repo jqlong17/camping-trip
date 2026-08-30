@@ -5,7 +5,7 @@
 > 类型：休闲 · 一日露营模拟 · 爱好向（不上架）
 
 正式中文名：**露营之旅**  
-曾用名 / 工程名：`linjian`（林间一夜）— 仓库目录可暂保留，对玩家展示统一用「露营之旅」。
+曾用名 / 电脑仓库：`linjian`（林间一夜）。对玩家统一用 **露营之旅** / **Camping Trip**；真机 Homebrew 目录与 CIA 文件名用 `CampingTrip`，不用拼音。
 
 ---
 
@@ -370,10 +370,68 @@ SFX **不必用 Suno**（不擅长短反馈音）。放入 `game/audio/`，P2 �
 | **DEV-034** | 2026-08-30 | done | **手冲特写改像素**：三步改为 16-bit 大色块，×2 nearest，与营地/钓鱼扇子一致 |
 | **DEV-035** | 2026-08-30 | done | **夜晚氛围**：色罩后画硬像素星星/十字亮星、偶发流星拖尾、萤火虫亮点；树冠随风轻晃；落叶粒子；入夜提示「抬头有星星」 |
 | **DEV-036** | 2026-08-30 | done | **全局像素闸门**：扫描运行时素材；标题油画改 16-bit；草地/花/营火/手冲图标硬像素重绘；分镜限色；skill `linjian-pixel-style` + `scripts/audit-pixel-style.py` |
+| **DEV-037** | 2026-08-30 | done | **真机加载修复**：标题图优先加载、分镜/立绘/走表/仪式按需加载；全屏图 pad 到 2 的幂；CIA RomFS 带 `game/`；New3DS 124MB；**禁止**把 `linjian.cia` 放进 `3ds/linjian/`（hbmenu data abort） |
+| **DEV-038** | 2026-08-30 | done | **安装预检闸门**：`scripts/verify-3ds-install.py`；deploy 结束必跑；skill `linjian-3ds-install`；PASS 才许拔卡 |
+| **DEV-039** | 2026-08-30 | done | **主画面图标/Banner**：文生图营地标（帐篷+营火）；`scripts/build-cia-icon.py` 锁成 48×48 / 256×128；旧占位备份 `cia/*_v1.png` |
+| **DEV-040** | 2026-08-30 | done | **对外去拼音**：HB 目录/`3dsx`/CIA 文件改为 `CampingTrip`；作者与简介不再写 linjian；仓库目录仍叫 linjian |
+| **DEV-041** | 2026-08-30 | done | **真机 setPitch**：LovePotion Source 无 `setPitch`，菜单音效 `playSfx` 改为 pcall，避免红屏 |
+| **DEV-042** | 2026-08-30 | done | **CIA 可装**：收紧 RSF（去掉 NAND 权限、关闭 compress）；安装包同时放到 `cias/` 与 `CIA(tool)/` |
+| **DEV-043** | 2026-08-30 | done | **真机无图 + 后半程 abort**：LovePotion 日志在 `save/camping-trip/errors/`；启动写 `load_report.txt`；探测 `game/assets` 前缀；真机音效不 clone/setPitch；deploy 禁止 macOS `._*` |
+| **DEV-044** | 2026-08-30 | done | **开机黑屏**：插卡黑屏先修 FAT/安全弹出，不是游戏砖了；`love.load` 第一句写 `boot`；禁止启动 `getDirectoryItems`；营地贴图/音频推迟到标题之后 |
+| **DEV-045** | 2026-08-30 | done | **SELECT 仍无 Luma**：卡上 `boot.firm` 与官方 13.4 哈希一致，不是文件坏了。关 `enable_external_firm_and_modules`；`3ds/as-ccd.3ds`（128MB）移出 HB 目录。下一步用「拔卡开机」对照是不是机子没读卡 |
+| **DEV-046** | 2026-08-30 | done | **HOME 菜单黑屏恢复**：SELECT 可进 Luma、Start 后黑屏，且 SD 确认安装 `00040000004C4A00`；判定自打 LovePotion CIA/banner 高风险。须从 GodMode9 Title manager 卸载；deploy 默认永久改为仅 3dsx，`--no-cia` 不再误拷旧 CIA |
+| **DEV-047** | 2026-08-30 | done | **卸载 CIA 后仍黑屏**：备份并移走日本区 HOME Menu extdata `00000082`，让系统重建图标/banner 缓存；不删游戏存档，但主菜单图标排列/文件夹可能重置 |
+| **DEV-048** | 2026-08-30 | done | **真机 PNG 全部 missing**：日志证实 source 是 `sdmc:/3ds/CampingTrip/game`，但虚拟路径 `assets/*` 不可见；改用 `mountFullPath("sdmc:/", "sdmc", "read", true)` 后从真实 SD 路径加载。失败图片负缓存，避免图鉴每帧重复 IO 卡顿 |
+| **DEV-049** | 2026-08-30 | done | **3DS 原生纹理管线**：日志明确 `newImage("*.png")` 真机会找同名 `.t3x`。本地构建 tex3ds 2.3.0；`build-3ds-textures.py` 转换 133 张运行时 PNG；deploy 自动转换；预检强制要求 T3X |
+| **DEV-050** | 2026-08-31 | done | **真机营地性能第二轮**：日志确认单 BGM / 无环境音 / 静态动效仍约 5 FPS；新增 `camp_static_base.png/.t3x` 离线预合成地面/水岸/小装饰，运行时只画少量前景并恢复轻量树/灌木风感；手冲完成后自动选中杯子，杯子/手冲均可继续喝咖啡；playtest 记录 `coffeeCups` |
 | **DEV-012** | — | planned | **P1** 加深：更多时段事件（搭帐篷动画、手冲小游戏） |
 | **DEV-014** | — | planned | **P3** 精修回家：次日收拾动画、周末计数 |
 | **DEV-015** | 2026-08-30 | done | 基础 SFX 清单齐：UI + 脚步/帐篷/手冲/杯子/扇子/点灯 |
 | **DEV-016** | — | planned | **P4** 继续加深美术：更多地砖转角、角色四向帧、道具动画（脚本出图，不强制付费软件） |
+
+### 12.1.1 真机性能接续记录（DEV-050）
+
+**证据来源：SD 真机日志 + 桌面 playtest。** 这段是给后续 Agent 接手性能问题时看的，不要只看桌面 FPS 做判断。
+
+最近三轮真机日志结论：
+
+1. `static_play_fx/console_single_stream_no_stop` 已经排除了主要风效、鱼鸟虫、环境音、多 BGM stream、`Source:stop()` 切换等变量，但营地仍长期约 `22–25 frames / 5s`，即约 `4–5 FPS`。
+2. `ensureCamp` 首次加载从约 `41700ms` 降到约 `30416ms`，说明减少静态模式资源加载有收益，但没有解决持续低帧。
+3. 标题、图鉴、关于页能跑到远高于营地的帧数，说明瓶颈集中在营地场景，不是整机或 LovePotion 全局都慢。
+4. 因为关掉动效后仍卡，树叶/水面/鸟虫不是主因；更可能是营地每帧大量小纹理 draw、纹理切换和 Lua 热路径开销。
+5. 真机 Canvas 实验曾导致黑屏判断不清，当前不把运行时 `newCanvas` 当默认优化路线；优先采用离线预合成图。
+
+当前代码策略：
+
+- build 标记：`2026-08-31-precomposed-camp-coffee-cup`。
+- 真机静态模式仍为默认：`static_play_fx/console_single_stream_no_stop`。
+- 音频保持单 BGM stream、无环境音、SFX 不 clone/setPitch/stop；不要和营地渲染优化混在一轮改。
+- `scripts/build-camp-static-base.py` 生成 `game/assets/camp_static_base.png`，deploy 再转出 `camp_static_base.t3x`。
+- 静态模式优先加载 `assets/camp_static_base.png`；若成功，地面、水岸、小花、芦苇、木头、踏脚石等不再逐帧绘制。
+- 运行时只保留树、灌木、帐篷、营火、玩家等少量前景逐帧绘制，并恢复轻量树/灌木风感。
+- `indexCampRenderData()` 缓存 decal/prop 行索引、树 variant 和鸟巢位置，避免每帧创建排序表或扫描全量 decal。
+
+下一轮真机测试必须看：
+
+```text
+boot build=2026-08-31-precomposed-camp-coffee-cup
+ensureCamp done fails=0 durationMs=... mode=static_play_fx staticBase=true
+perf scene=play frames=... slow=... maxDtMs=... mode=static_play_fx/console_single_stream_no_stop
+```
+
+判断口径：
+
+- 若 `staticBase=true` 且帧率明显提升：继续逐项恢复轻量效果，优先树/灌木风感，其次水面，最后鱼鸟虫/粒子。
+- 若 `staticBase=true` 但仍约 `4–5 FPS`：继续减少前景 draw，把树/灌木/帐篷/营火也按“静态底图 + 玩家单独层”处理，或降低树数量/纹理种类。
+- 若 `staticBase=false`：先查 `camp_static_base.t3x` 是否存在、是否过期、`loadImage("assets/camp_static_base.png")` 是否失败，别先改玩法。
+- 若没有 `boot build=...`：问题在 Homebrew/LovePotion/SD 启动链，不是营地 Lua 热路径。
+
+咖啡交互修正：
+
+- 旧体验问题：手冲完成后玩家仍可能停留在“手冲”选择，看起来像无法喝咖啡。
+- 当前行为：完成三步手冲后自动选中“杯子”；杯子可继续喝；如果已经冲好，再按“手冲”也会转为喝咖啡。
+- 下屏会提示「咖啡已冲好 · 选杯子按 A 喝」或「A 喝咖啡 · 已喝 N 口」。
+- playtest 已增加 `coffeeCups` 断言信号，当前日志为 `dripped=true coffeeCups=2`。
 
 ### 12.2 Agent 验收约定
 

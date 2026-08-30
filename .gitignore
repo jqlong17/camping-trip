@@ -1,0 +1,8 @@
+vendor/lovepotion-3ds/
+vendor/tools/
+vendor/*.zip
+vendor/*.elf
+dist/3ds/linjian/lovepotion.3dsx
+dist/3ds/linjian/linjian.cia
+build/
+.DS_Store

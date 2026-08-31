@@ -11,7 +11,7 @@ from pathlib import Path
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
-from asset_layout import FOREST_CAMP, SHARED, ASSETS
+from asset_layout import FOREST_CAMP, FOREST_WORLD, SHARED, ASSETS
 
 OUT = FOREST_CAMP / "camp_static_base.png"
 TOP_W, TOP_H, TILE = 400, 240, 16
@@ -19,7 +19,7 @@ PALETTE = 48
 
 
 def open_rgba(name: str) -> Image.Image:
-    for base in (FOREST_CAMP, SHARED, ASSETS):
+    for base in (FOREST_CAMP, FOREST_WORLD, SHARED, ASSETS):
         path = base / name
         if path.is_file():
             return Image.open(path).convert("RGBA")
@@ -166,7 +166,7 @@ def main() -> int:
     stump = open_rgba("prop_stump.png")
     shadow_sm = open_rgba("prop_shadow_sm.png")
     shadow_tree = open_rgba("prop_shadow_tree.png")
-    nest = open_rgba("world/nest.png")
+    nest = open_rgba("nest.png")
     pier = open_rgba("prop_pier.png")
     out = Image.new("RGBA", (512, 256), (38, 46, 36, 255))
 

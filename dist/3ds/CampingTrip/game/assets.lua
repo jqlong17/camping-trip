@@ -125,6 +125,39 @@ function Assets.drawFitted(img, x, y, srcW, srcH, sx, sy)
   love.graphics.draw(img, x, y, 0, sx, sy)
 end
 
+-- 分镜全屏：POT 512×256 只取左上 400×240 内容区，nearest 对齐上屏（避免整图被糊缩放）
+function Assets.drawStoryFrame(img, x, y, dw, dh)
+  if not img then return end
+  dw = dw or 400
+  dh = dh or 240
+  local iw, ih = img:getWidth(), img:getHeight()
+  local cw, ch = iw, ih
+  if iw >= 400 and ih >= 240 then
+    cw, ch = math.min(400, iw), math.min(240, ih)
+  end
+  local scale = math.min(dw / cw, dh / ch)
+  if math.abs(scale - 1) < 0.03 then scale = 1 end
+  local ox = x + math.floor((dw - cw * scale) / 2 + 0.5)
+  local oy = y + math.floor((dh - ch * scale) / 2 + 0.5)
+  if cw == iw and ch == ih then
+    love.graphics.draw(img, ox, oy, 0, scale, scale)
+    return
+  end
+  local q = fitQuads[img]
+  if not q then
+    local ok, made = pcall(love.graphics.newQuad, 0, 0, cw, ch, iw, ih)
+    if ok then
+      q = made
+      fitQuads[img] = q
+    end
+  end
+  if q then
+    love.graphics.draw(img, q, ox, oy, 0, scale, scale)
+  else
+    love.graphics.draw(img, ox, oy, 0, scale, scale)
+  end
+end
+
 function Assets.ensureStory(key)
   local AP = host and host.AP
   store.story = store.story or {}
@@ -166,15 +199,32 @@ function Assets.ensureRitual()
     ready = true,
     drip = {},
     fishAnim = {},
-    fanAnim = {}
   }
   local AP = host and host.AP
   DripBrew.loadChoiceAssets(store.ritual, Assets.load)
   TeaBrew.loadChoiceAssets(store.ritual, Assets.load)
   FishRod.loadChoiceAssets(store.ritual, Assets.load)
+  TentGear.loadPitchFrames(store.ritual, Assets.load)
+  CupSip.loadChoiceAssets(store.ritual, Assets.load)
+  CookMeal.loadChoiceAssets(store.ritual, Assets.load)
   if AP then
-    for i = 1, 4 do
-      store.ritual.fanAnim[i] = Assets.load(AP.forestWorld("fan_anim_" .. (i - 1) .. ".png"))
+    store.ritual.tentColors, store.ritual.tentStyles, store.ritual.tentDoors = {}, {}, {}
+    for _, id in ipairs({ "sand", "pine", "mist" }) do
+      store.ritual.tentColors[id] = Assets.load(AP.tentGear("color_" .. id .. ".png"))
+    end
+    for _, id in ipairs({ "dome", "tunnel", "peak" }) do
+      store.ritual.tentStyles[id] = Assets.load(AP.tentGear("style_" .. id .. ".png"))
+    end
+    store.ritual.tentDoors.shut = Assets.load(AP.tentGear("door_shut.png"))
+    store.ritual.tentDoors.ajar = Assets.load(AP.tentGear("door_ajar.png"))
+    store.ritual.tentPitch = {}
+    for _, style in ipairs({ "dome", "tunnel", "peak" }) do
+      for _, color in ipairs({ "sand", "pine", "mist" }) do
+        for _, door in ipairs({ "shut", "ajar" }) do
+          local key = "pitch_" .. style .. "_" .. color .. "_" .. door
+          store.ritual.tentPitch[key] = Assets.load(AP.tentCamp(key .. ".png"))
+        end
+      end
     end
   end
   return store.ritual
@@ -205,7 +255,7 @@ function Assets.loadBoot()
   store.titleBot = Assets.load(AP.ui("title_bot.png"))
   store.packBg = Assets.load(AP.ui("ui_pack_bg.png"))
   store.story, store.cast, store.walk = {}, {}, {}
-  store.ritual = { ready = false, drip = {}, fishAnim = {}, fanAnim = {} }
+  store.ritual = { ready = false, drip = {}, fishAnim = {} }
   if host and host.appendLoadLog then
     host.appendLoadLog("loadAssets title done fails=" .. loadFailCount)
   end

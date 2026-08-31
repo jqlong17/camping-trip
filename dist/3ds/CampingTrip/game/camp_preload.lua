@@ -152,6 +152,23 @@ local function makeSteps()
     a.tent = load(AP.forestCamp("tile_tent.png"))
     a.tentOpen = load(AP.forestCamp("tile_tent_open.png")) or a.tent
     a.tentPacked = load(AP.forestCamp("tile_tent_packed.png"))
+    a.tentPitch, a.tentPack = {}, {}
+    for _, style in ipairs({ "dome", "tunnel", "peak" }) do
+      for _, color in ipairs({ "sand", "pine", "mist" }) do
+        for _, door in ipairs({ "shut", "ajar" }) do
+          local key = "pitch_" .. style .. "_" .. color .. "_" .. door
+          a.tentPitch[key] = load(AP.tentCamp(key .. ".png"))
+        end
+        local pack = "pack_" .. color
+        a.tentPack[pack] = load(AP.tentCamp(pack .. ".png"))
+      end
+    end
+    if not a.tentOpen and a.tentPitch.pitch_dome_sand_shut then
+      a.tentOpen = a.tentPitch.pitch_dome_sand_shut
+    end
+    if not a.tentPacked and a.tentPack.pack_sand then
+      a.tentPacked = a.tentPack.pack_sand
+    end
     a.firepit = load(AP.forestCamp("prop_firepit.png"))
   end)
   add(function()

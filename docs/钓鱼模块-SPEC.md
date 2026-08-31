@@ -63,7 +63,7 @@ ritual/fish/bait_<id>.png          # 48×48
 ritual/fish/spot_<id>.png
 ritual/fish/sinker_<id>.png        # light|mid|heavy
 ritual/fish/style_<id>.png         # wait|twitch|dance
-ritual/fish/fish_1..4.png          # 120×76
+ritual/fish/fish_1..4.png          # 160×120 按件无人物特写（含 fish_4_miss）
 ritual/fish/fish_4_miss.png
 ```
 

@@ -73,9 +73,13 @@ def extract_fn(src: str, name: str) -> str:
 
 def check_lua() -> None:
     src = MAIN.read_text(encoding="utf-8")
-    load = extract_fn(src, "loadAssets")
-    if not load:
-        log("FAIL", "main.lua 找不到 loadAssets()")
+    assets_src = (GAME / "assets.lua").read_text(encoding="utf-8")
+    preload_src = (GAME / "camp_preload.lua").read_text(encoding="utf-8")
+    load_start = assets_src.find("function Assets.loadBoot")
+    load_end = assets_src.find("\nend", load_start)
+    load = assets_src[load_start:load_end] if load_start >= 0 else ""
+    if "Assets.loadBoot()" not in src or not load:
+        log("FAIL", "main.lua 未委托 Assets.loadBoot()")
         return
 
     title_pos = load.find('AP.ui("title_top.png")')
@@ -83,46 +87,41 @@ def check_lua() -> None:
         title_pos = load.find("title_top")
     grass_pos = load.find("tile_grass")
     if title_pos < 0:
-        log("FAIL", "loadAssets 没有先加载 title_top")
+        log("FAIL", "Assets.loadBoot 没有先加载 title_top")
     elif grass_pos >= 0 and title_pos > grass_pos:
         log("FAIL", "title_top 必须在地砖之前加载")
     else:
-        log("OK", "标题图在 loadAssets 里最先加载")
+        log("OK", "标题图在 Assets.loadBoot 里最先加载")
 
-    if "detectAssetRoot" in src and "load_report.txt" in src:
+    if "function Assets.detectRoot" in assets_src and "load_report.txt" in src:
         log("OK", "真机会写 load_report.txt 并探测 game/assets 前缀")
     else:
         log("FAIL", "缺少 detectAssetRoot / load_report.txt（真机无图时没法对照日志）")
-    if "mountFullPath" in src and '"sdmc:/"' in src:
+    if "mountFullPath" in assets_src and '"sdmc:/"' in assets_src:
         log("OK", "真机挂载 SD 根目录读取旁路资源")
     else:
         log("FAIL", "真机必须 mountFullPath(sdmc:/) 后读取图片")
 
-    love_load = extract_fn(src, "love.load") or ""
     write_pos = src.find('write("load_report.txt"')
-    detect_pos = src.find("pcall(detectAssetRoot)")
-    if detect_pos < 0:
-        detect_pos = src.find("detectAssetRoot()")
+    detect_pos = src.find("pcall(Assets.detectRoot)")
     if write_pos >= 0 and detect_pos >= 0 and write_pos < detect_pos:
         log("OK", "love.load 先写 boot 再探测路径")
     else:
         log("FAIL", "love.load 必须先写 load_report.txt 再调用 detectAssetRoot")
 
-    probe = extract_fn(src, "writeLoadProbe")
-    if probe and "getDirectoryItems" in probe:
+    if "function Assets.writeProbe" in assets_src and "getDirectoryItems" in assets_src:
         log("FAIL", "writeLoadProbe 禁止 getDirectoryItems（真机列目录会卡死/黑屏）")
     else:
         log("OK", "启动探测不列目录")
 
-    if "function ensureCamp" in src and "tile_grass" not in load:
+    if "function CampPreload.ensure" in preload_src and "tile_grass" not in load:
         log("OK", "营地贴图按需加载（ensureCamp），启动不读地砖")
     else:
         log("FAIL", "loadAssets 仍在启动时加载地砖")
 
-    load_img = extract_fn(src, "loadImage")
-    if not load_img:
+    if "function Assets.load" not in assets_src:
         log("FAIL", "找不到 loadImage()")
-    elif "setFilter" in load_img and "pcall" in load_img:
+    elif "setFilter" in assets_src and "pcall" in assets_src:
         log("OK", "loadImage 里 setFilter 有 pcall")
     else:
         log("FAIL", "loadImage 的 setFilter 必须 pcall（LovePotion 可能没有）")
@@ -160,18 +159,18 @@ def check_lua() -> None:
 
     if re.search(r'AP\.story\(', load):
         log("OK", "分镜走 asset_paths.story()")
-    elif re.search(r'loadImage\("assets/story/', load):
-        log("FAIL", "loadAssets 仍一次性加载分镜（应走 ensureStory）")
+    elif re.search(r'Assets\.load\("assets/story/', load):
+        log("FAIL", "Assets.loadBoot 仍一次性加载分镜（应走 ensureStory）")
     else:
         log("OK", "分镜未在启动时全量加载")
 
     if re.search(r"c\d+_walk\.png", load) or re.search(r"for i = 1, 9 do[\s\S]*_walk", load):
-        log("FAIL", "loadAssets 仍一次性加载九人走表")
+        log("FAIL", "Assets.loadBoot 仍一次性加载九人走表")
     else:
         log("OK", "走表未在启动时全量加载")
 
     for fn in ("ensureStory", "ensureCast", "ensureWalk", "drawFitted"):
-        if f"function {fn}" in src:
+        if f"function Assets.{fn}" in assets_src:
             log("OK", f"有 {fn}()")
         else:
             log("FAIL", f"缺少 {fn}()")
@@ -344,6 +343,7 @@ def check_sd(require: bool) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--require-sd", action="store_true", help="没插卡也算失败")
+    ap.add_argument("--skip-sd", action="store_true", help="只检查源码与本地 dist，不读取已插入的 SD")
     args = ap.parse_args()
 
     print("== 露营之旅 真机安装预检 ==")
@@ -356,7 +356,8 @@ def main() -> int:
     check_pngs()
     check_romfs()
     check_dist()
-    check_sd(args.require_sd)
+    if not args.skip_sd:
+        check_sd(args.require_sd)
 
     print(f"-- {ok_n} ok / {warn_n} warn / {fail_n} fail --")
     if fail_n:

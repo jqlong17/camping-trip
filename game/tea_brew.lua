@@ -323,12 +323,14 @@ function T.drawTop(ritual, assets, ctx)
   local title, img, mode = T.topView(ritual, assets)
   if img then
     love.graphics.setColor(1, 1, 1, 1)
+    local iw, ih = img:getWidth(), img:getHeight()
     if mode == "brew" then
-      local srcW, srcH, s = 120, 76, 2
-      ctx.drawFitted(img, math.floor((ctx.TOP_W - srcW * s) / 2), 34, srcW, srcH, s, s)
+      -- 等比装进上屏，禁止再压成固定 120×76
+      local maxW, maxH = ctx.TOP_W - 32, ctx.TOP_H - 52
+      local s = math.min(maxW / iw, maxH / ih)
+      love.graphics.draw(img, math.floor((ctx.TOP_W - iw * s) / 2), math.floor(26 + (maxH - ih * s) / 2), 0, s, s)
     else
       local s = 3
-      local iw, ih = img:getWidth(), img:getHeight()
       love.graphics.draw(img, (ctx.TOP_W - iw * s) / 2, 56, 0, s, s)
     end
   end
@@ -342,25 +344,29 @@ end
 
 local function drawChoiceRow(ritual, items, phase, assets, BOT_W)
   local n = #items
-  local slotW = math.floor((BOT_W - 20) / math.min(n, 5))
+  local slotW = math.floor((BOT_W - 20) / math.max(n, 1))
   for i, it in ipairs(items) do
     local x = 10 + (i - 1) * slotW
     local on = (i == ritual.pick)
+    local boxW = slotW - 4
     love.graphics.setColor(on and 0.98 or 0.94, on and 0.88 or 0.9, on and 0.55 or 0.82)
-    love.graphics.rectangle("fill", x, 48, slotW - 4, 110)
+    love.graphics.rectangle("fill", x, 48, boxW, 96)
     love.graphics.setColor(0.3, 0.2, 0.12)
-    love.graphics.rectangle("line", x, 48, slotW - 4, 110)
+    love.graphics.rectangle("line", x, 48, boxW, 96)
     local icon = T.choiceIcon(phase, it, assets)
     if icon then
       love.graphics.setColor(1, 1, 1, 1)
       local iw, ih = icon:getWidth(), icon:getHeight()
-      local s = math.min(40 / iw, 36 / ih)
-      love.graphics.draw(icon, x + (slotW - 4 - iw * s) / 2, 56, 0, s, s)
+      local s = math.min(40 / iw, 40 / ih)
+      love.graphics.draw(icon, x + (boxW - iw * s) / 2, 54, 0, s, s)
     end
     love.graphics.setColor(0.22, 0.14, 0.08)
-    love.graphics.print(T.choiceLabel(phase, it), x + 4, 100)
+    love.graphics.printf(T.choiceLabel(phase, it), x, 108, boxW, "center")
+  end
+  local cur = items[ritual.pick]
+  if cur then
     love.graphics.setColor(0.4, 0.3, 0.2)
-    love.graphics.print(T.choiceNote(phase, it), x + 4, 118)
+    love.graphics.printf(T.choiceNote(phase, cur), 12, 152, BOT_W - 24, "center")
   end
 end
 
@@ -370,21 +376,21 @@ function T.drawBottom(ritual, assets, ctx)
   local head = "泡茶"
   if phase then
     if phase.kind == "brew" then
-      head = tostring(idx) .. "/" .. #T.PHASES .. " " .. phase.head .. " · " .. tostring(ritual.brewStep) .. "/3"
+      head = tostring(idx) .. "·" .. #T.PHASES .. " " .. phase.head .. " · " .. tostring(ritual.brewStep) .. "·3"
     else
-      head = tostring(idx) .. "/" .. #T.PHASES .. " " .. phase.head
+      head = tostring(idx) .. "·" .. #T.PHASES .. " " .. phase.head
     end
   end
   love.graphics.setColor(0.32, 0.22, 0.14)
   love.graphics.rectangle("fill", 6, 6, BOT_W - 12, 28)
   love.graphics.setColor(1, 0.96, 0.88)
-  love.graphics.print(head, 14, 12)
+  love.graphics.printf(head, 10, 12, BOT_W - 20, "left")
 
   if phase and phase.kind == "choice" then
     drawChoiceRow(ritual, T.catalogFor(phase), phase, assets, BOT_W)
   elseif phase and phase.kind == "confirm" then
     love.graphics.setColor(0.25, 0.18, 0.1)
-    love.graphics.print("先烫热杯壶，茶香才稳。", 40, 80)
+    love.graphics.printf("先烫热杯壶，茶香才稳。", 20, 80, BOT_W - 40, "center")
     if assets and assets.rinse then
       love.graphics.setColor(1, 1, 1, 1)
       love.graphics.draw(assets.rinse, 136, 100, 0, 2, 2)
@@ -393,19 +399,20 @@ function T.drawBottom(ritual, assets, ctx)
     love.graphics.setColor(0.25, 0.18, 0.1)
     local L = T.leaves[ritual.leafI]
     local W = T.wares[ritual.wareI]
-    love.graphics.print((L and L.name or "?") .. " · " .. (W and W.name or "?")
-      .. " · " .. tostring(ritual.tempC) .. "度 · " .. tostring(ritual.steeps) .. "次", 24, 70)
-    love.graphics.print("茶烟轻轻的。慢慢来。", 24, 100)
+    love.graphics.printf((L and L.name or "?") .. " · " .. (W and W.name or "?")
+      .. " · " .. tostring(ritual.tempC) .. "度 · " .. tostring(ritual.steeps) .. "次",
+      16, 70, BOT_W - 32, "center")
+    love.graphics.printf("茶烟轻轻的。慢慢来。", 16, 100, BOT_W - 32, "center")
   end
 
   love.graphics.setColor(0.35, 0.55, 0.35)
   love.graphics.rectangle("fill", 100, 210, 120, 22)
   love.graphics.setColor(1, 1, 1)
-  love.graphics.print((phase and phase.kind == "brew") and "A 下一步" or "A 确认", 128, 213)
+  love.graphics.printf((phase and phase.kind == "brew") and "A 下一步" or "A 确认", 100, 213, 120, "center")
   love.graphics.setColor(0.55, 0.4, 0.35)
   love.graphics.rectangle("fill", 230, 210, 70, 22)
   love.graphics.setColor(1, 1, 1)
-  love.graphics.print("取消", 248, 213)
+  love.graphics.printf("取消", 230, 213, 70, "center")
 end
 
 function T.potHint(ready, cups, highlight)

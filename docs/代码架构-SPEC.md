@@ -1,8 +1,10 @@
 # 露营之旅 — 代码架构 SPEC（模块化）
 
 > 从属：[游戏设计-SPEC.md](./游戏设计-SPEC.md) · [动画与交互-SPEC.md](./动画与交互-SPEC.md)  
-> 状态：2026-08-31 · **P0–P6 已落地**（DEV-068a–e）  
+> 状态：2026-08-31 · **P0–P8 已落地**（DEV-068a–f）
 > 动机：真机/桌面 `main.lua` 触顶 **Lua 200 locals**；单文件 ~3700 行，玩法迭代风险高。
+>
+> **当前代码入口**：先读 [§14 技术快照](#14-技术快照2026-08-31-1347-utc8)。§1–§13 同时保留了迁移前问题、目标设计与实施计划；若与当前代码不一致，以 §14 和实际代码为准。
 
 ---
 
@@ -475,14 +477,14 @@ DripBrew.bindHost({
 
 | ID | 日期 | 状态 | 摘要 |
 |----|------|------|------|
-| **DEV-068** | 2026-08-31 | **in progress** | **代码架构 SPEC**：main.lua 198/200 locals；模块化分层 + State/Host；迁移 P0–P8 |
+| **DEV-068** | 2026-08-31 | **done** | **代码架构 SPEC**：main.lua 从约 3700 行收敛为 119 行引擎壳；6/200 locals |
 | **DEV-068a** | 2026-08-31 | done | P0：`count-lua-locals.py` |
 | **DEV-068b** | 2026-08-31 | done | P1：`state` + `time` + `persist`；main 173 locals |
 | **DEV-068c** | 2026-08-31 | done | P2：`ui_toast.lua` + `audio.lua`（bindHost） |
 | **P1–P3 接线** | 2026-08-31 | done | `state/persist/time/ui_toast/playtest` 接入 main；102 locals |
 | **DEV-068e** | 2026-08-31 | done | P4–P6：`assets` + `camp_preload` + `camp_map` + `camp_world` + `draw/camp_tiles` + `camp_render`；main **115** locals；playtest PASS |
 | DEV-069 | — | wip | 真机 title/night BGM + 近水溪 + 近鸟 sfx（单独立 SPEC） |
-| DEV-068f | — | planned | P7–P8：scenes + input；main ≤150 行 |
+| **DEV-068f** | 2026-08-31 | done | P7–P8：`scene_flow` + `scenes/*` + `draw/*` + `input`；运行期状态与装配拆至 `runtime/session/bindings`；main **119 行 / 6 locals**；41 步 playtest PASS |
 
 ---
 
@@ -499,4 +501,387 @@ DripBrew.bindHost({
 
 ---
 
-*文档版本：2026-08-31 · 与 buildId `2026-08-31-tea-brew` 对齐*
+## 14. 技术快照（2026-08-31 13:47 UTC+8）
+
+> **时间点声明**：本节记录的是 **2026-08-31 13:47（UTC+8）工作区代码现状**，对应
+> `runtime.lua` 中 buildId `2026-08-31-dev071-p7-p8`。它是交接索引和诊断基线，
+> **不是永久架构承诺，也不自动覆盖未来提交**。后续改动若改变模块边界、状态所有权、
+> 启动顺序或验收方式，应新增下一份带时间的快照，不要静默改写本节所描述的历史状态。
+
+### 14.1 快照摘要
+
+| 指标 | 当前值 | 说明 |
+|------|--------|------|
+| 运行时代码 | `game/**/*.lua` 共 **5600 行** | 32 个 Lua 文件 |
+| 引擎入口 | `game/main.lua` **119 行** | 只注册全局模块、组装依赖、实现 `love.*` 回调 |
+| main chunk locals | **6 / 200** | Lua 5.1 locals 风险已解除 |
+| 最大 Lua 文件 | `drip_brew.lua` **449 行** | 其次 `fish_rod.lua` 434、`tea_brew.lua` 419 |
+| 场景主流程 | `title → prologue → cast(首次) → depart → play → homecoming → diary → title` | 已有角色时只跳过 cast |
+| 自动验收 | 41 步 `love game --playtest` | 2026-08-31 本快照为 PASS |
+| 本地 3DS 闸门 | `verify-3ds-install.py --skip-sd` | 本快照为 48/48 PASS |
+
+### 14.2 当前真实拓扑
+
+下面是**实际代码**的依赖关系，不是 §4 的历史目标目录：
+
+```mermaid
+flowchart TB
+  Main["main.lua<br/>Love 回调与启动"] --> Bind["bindings.lua<br/>依赖装配"]
+  Main --> Runtime["runtime.lua<br/>单次运行状态"]
+  Main --> Flow["scene_flow.lua"]
+  Main --> Input["input.lua"]
+  Main --> Draw["draw/init.lua"]
+  Main --> Systems["Assets / Audio / Time / Persist"]
+
+  Bind --> Camp["camp_map / camp_preload / camp_world / camp_render / camp_tiles"]
+  Bind --> Session["session.lua"]
+  Bind --> Playtest["playtest.lua"]
+  Bind --> Flow
+  Bind --> Input
+
+  Flow --> Scenes["scenes/story / cast / menu / codex"]
+  Flow --> Session
+  Input --> Flow
+  Input --> Scenes
+  Input --> Session
+  Draw --> Scenes
+  Draw --> Camp
+  Draw --> Session
+
+  Session --> Gear["gear_play.lua"]
+  Gear --> Rituals["drip_brew / tea_brew / fish_rod"]
+
+  Persist --> State["state.lua<br/>跨周/本趟数据"]
+  Runtime --> State
+```
+
+依赖方向大体是：
+
+```text
+main / bindings
+  → flow + input + draw
+  → session + scenes + camp
+  → gear + rituals + systems
+  → state / runtime / asset paths
+```
+
+当前并非严格无环的“纯分层架构”，而是 **Lua 单例模块 + Host 注入 + 少量全局模块注册**
+组成的实用型架构。模块之间没有已知 `require` 循环，但会通过 `_G` 中的
+`State`、`Audio`、`Assets`、`CampMap` 等间接耦合。
+
+### 14.3 状态所有权（当前现状）
+
+当前状态不是 §3.2 所设想的单一 `State`，而是按生命周期分散在多个单例：
+
+| 所有者 | 持有内容 | 生命周期 / 写入者 |
+|--------|----------|-------------------|
+| `state.lua` | `trip.haul`、果树余量、存档数据、菜单定义、角色定义 | 跨场景；`persist`、`scene_flow`、`session`、`gear_play` |
+| `runtime.lua` | 当前 scene、玩家、装备选择、帐篷、杯壶、ritual、字体、平台 flags、性能计数 | 单次进程；`main`、`scene_flow`、`session`、`input` |
+| `time.lua` 私有 upvalue | 天数、分钟、冻结状态、自动推进累计 | 单次营地；仅 `Time.*` API 修改 |
+| `camp_map.lua` 私有 upvalue | 地图、decals、firepit、渲染索引 | 启动构建；CampMap API |
+| `camp_world.lua` 私有 upvalue | 鱼、鸟虫、夜空、溅水特效 | 单次进程；CampWorld API |
+| `assets.lua` 私有 upvalue | 资源根、失败缓存、已加载图片表 | 单次进程；Assets API |
+| `audio.lua` 私有 upvalue | BGM/SFX/环境音 Source 与冷却 | 单次进程；Audio API |
+| `scenes/story.lua` | 三组 beats 与当前索引 | 单次场景流程；Story/Flow |
+
+因此，排查状态问题时不要只搜索 `State.*`；至少同时检查 `runtime.lua`、`time.lua`
+以及对应 camp/system 模块的私有状态。
+
+### 14.4 启动、帧循环与场景数据流
+
+#### 启动链
+
+```text
+main.lua require 全局模块
+  → require runtime/session/flow/input/draw/bindings
+  → Bindings.bind()（在 love.load 之前）
+  → love.load()
+      → 写 boot 日志 / detectRoot
+      → Persist.load()
+      → CampMap.build() + indexRenderData()
+      → Assets.loadBoot()
+      → Audio.loadBgm/loadSfx（桌面）
+      → 字体、星空、桌面下屏 Canvas
+      → Flow.syncSceneBgm()
+      → Playtest 开关
+```
+
+关键约束：`Bindings.bind()` 当前发生在模块加载期，依赖 `main.lua` 先把 17 个兼容模块
+挂到全局；改变 require 顺序可能导致运行时 nil。
+
+#### 每帧更新
+
+```text
+love.update(dt)
+  → 性能窗口与 load_report
+  → Audio.ensureConsoleLoaded()
+  → titlePulse / waterPhase / Toast
+  → brewTimer / potSimmer
+  → scene == play:
+      玩家 idle 帧
+      CampWorld.update*（仅 !staticPlayFx）
+      Audio.tick()
+      Session.updateTimedRitual()
+      Time.tickAuto()
+  → Playtest.tick()
+```
+
+#### 输入
+
+```text
+love.keypressed/gamepadpressed/touchpressed/mousepressed
+  → input.lua
+  → 按 Runtime.scene 分发
+  → scenes.menu/cast/codex（选择与 hit test）
+  → scene_flow（场景转换）
+  → session / gear_play（营地动作与仪式）
+```
+
+#### 绘制
+
+```text
+love.draw(screen)
+  → draw/init.lua 路由 top / bottom
+  → draw/menu.lua：title / codex / about
+  → draw/story.lua：story / cast / diary / toast
+  → draw/play.lua：玩家、世界附加物、仪式、背包下屏
+  → camp_render.lua + draw/camp_tiles.lua：营地上屏
+```
+
+#### 存档
+
+```text
+Persist.load() → State.save.data → refreshMenu()
+营地行为 → State.trip.haul
+homecoming → diary → Flow.finishDiary()
+  → Persist.commitTrip()
+  → save.json
+  → Flow.goTitle()
+```
+
+### 14.5 Host / bindings 机制
+
+`bindings.lua` 是当前 composition root，负责四组注入：
+
+1. **campHost**：统一给 `CampMap`、`CampPreload`、`CampWorld`、`CampTiles`、
+   `CampRender` 注入尺寸、flags、资源、状态 getter 与绘制回调。
+2. **系统 Host**：给 `Assets`、`Time`、`Audio` 注入平台、日志和跨系统回调。
+3. **玩法 helpers**：给 `Session`、`Flow`、`Input`、`Cast` 注入 `say` 与按需资源加载；
+   `Session.bindHost()` 再向下绑定 `GearPlay`，后者绑定三个仪式模块。
+4. **playHost 代理**：通过 metatable 把 41 步 playtest 对字段的读写映射到
+   `Runtime`、CampWorld 与 Flow/Session API。
+
+新增模块时优先选择以下之一：
+
+- 纯数据/纯函数：直接 `require`，不要 bind。
+- 需要 Love、日志、音频、资源或跨模块写状态：在 `bindings.lua` 中注入最小 Host。
+- 不要在业务模块中新建另一套全局 service locator。
+
+### 14.6 代码索引
+
+#### 引擎、状态与系统
+
+| 文件 | 当前职责 | 主要入口 |
+|------|----------|----------|
+| `main.lua` | require、启动、帧循环、Love 回调 | `love.load/update/draw/*pressed` |
+| `bindings.lua` | 所有 Host 组装、playtest 代理、统一日志 | `bind`、`appendLoadLog` |
+| `runtime.lua` | 单次运行期状态、平台 flags、装备静态表 | `require("runtime")` 返回共享表 |
+| `state.lua` | 存档/本趟/菜单/角色共享数据 | `resetTripHaul` |
+| `persist.lua` | JSON 编解码、save.json、累计统计、菜单继续状态 | `load/write/commitTrip/resetTripHaul` |
+| `time.lua` | 营地时钟、光线档、夜晚、R 快进、自动推进 | `resetForCamp/tickAuto/fastForward/setClock` |
+| `audio.lua` | 桌面/3DS BGM、SFX、近水环境音、场景音频同步 | `load*`、`play*`、`sync*`、`tick` |
+| `assets.lua` | 真机路径探测、PNG/T3X 加载、失败负缓存、懒加载 | `detectRoot/load/ensure*/loadBoot` |
+| `asset_paths.lua` | 重组后资源路径和 9 种杯型定义 | `ui/story/gearPath/cupPath/...` |
+| `ui_toast.lua` | 顶屏提示状态与绘制 | `say/clear/update/draw` |
+| `conf.lua` | LÖVE identity、窗口尺寸、版本 | `love.conf` |
+
+#### 场景、会话与输入
+
+| 文件 | 当前职责 | 主要入口 |
+|------|----------|----------|
+| `scene_flow.lua` | 场景状态机、场景进入/推进、选角保存、日记提交 | `go*`、`advance*`、`confirmMenu/confirmCast` |
+| `session.lua` | 玩家移动、杯壶、角色应用、短仪式、GearPlay Host | `tryMove/tryUseGear/drink*/updateTimedRitual` |
+| `input.lua` | 键盘、手柄、触摸、鼠标的 scene 分发 | `onKey/onGamepad/onTouch/onMouse` |
+| `scenes/story.lua` | prologue/depart/homecoming beats 与索引 | `reset/advance` |
+| `scenes/menu.lua` | 标题菜单移动和命中测试 | `move/hit` |
+| `scenes/cast.lua` | 角色九宫格移动、设置、命中测试 | `set/move/hit` |
+| `scenes/codex.lua` | 图鉴选择游标 | `move/set` |
+
+#### 营地世界
+
+| 文件 | 当前职责 | 主要入口 |
+|------|----------|----------|
+| `camp_map.lua` | 地图生成、通行、溪流、营火、渲染索引 | `build/indexRenderData/tileAt/walkable` |
+| `camp_preload.lua` | 营地资源分步任务和强制完成 | `begin/runSlice/ensure/ready` |
+| `camp_world.lua` | 鱼鸟虫、落叶、流星、星空、溅水 | `spawn*/update*/draw*` |
+| `camp_render.lua` | 营地上屏分层编排和 HUD | `drawPlayTop` |
+| `draw/camp_tiles.lua` | 地砖、水岸、prop、果树 overlay、静态 Canvas | `draw*`、`buildCampGroundCanvas` |
+
+#### 装备与仪式
+
+| 文件 | 当前职责 | 主要入口 |
+|------|----------|----------|
+| `gear_play.lua` | 摘果、帐篷、点灯、装备分发、日记摘要 | `tryUseGear/toggleTent/tryHarvestFruit/diaryTripLines` |
+| `drip_brew.lua` | 手冲相位、选择、口感计算、上下屏绘制 | `start/advance/nudge/draw*/potHint` |
+| `tea_brew.lua` | 泡茶相位、选择、口感计算、上下屏绘制 | `start/advance/nudge/draw*/potHint` |
+| `fish_rod.lua` | 钓鱼相位、命中结算、心情、上下屏绘制 | `start/advance/nudge/resolveCatch/draw*` |
+
+#### 表现层
+
+| 文件 | 当前职责 | 主要入口 |
+|------|----------|----------|
+| `draw/init.lua` | 上下屏与 scene 绘制路由 | `frame/top/bottom` |
+| `draw/menu.lua` | 标题、图鉴、关于 | `title*/codex*/about*` |
+| `draw/story.lua` | 分镜、选角、日记、toast | `story*/cast*/diary*/toast` |
+| `draw/play.lua` | 玩家、动态附加物、仪式 overlay、背包下屏 | `playerAt/worldFx/ritualOverlay/bottom` |
+
+#### 测试、构建与部署
+
+| 文件 / 命令 | 用途 |
+|-------------|------|
+| `playtest.lua` | 41 步桌面全流程状态机；写 `playtest/result.txt` |
+| `scripts/count-lua-locals.py` | Lua 5.1 chunk local 数量门禁 |
+| `scripts/verify-3ds-install.py` | 源码、纹理、RomFS、dist、可选 SD 预检 |
+| `scripts/audit-pixel-style.py` | 运行时 PNG 像素风格审计 |
+| `scripts/build-3ds-textures.py` | PNG → LovePotion T3X |
+| `scripts/build-camp-static-base.py` | 真机营地静态底图生成 |
+| `scripts/deploy-to-sd.sh` | 构建纹理、刷新 dist、可选同步 SD；默认不打 CIA |
+
+其余 `scripts/build-*.py` 多为一次性或可重复的美术资产生成器；修改对应资产前先读脚本，
+不要手工覆盖生成物后丢失来源。
+
+### 14.7 当前架构 Review
+
+#### 已经做得好的部分
+
+1. `main.lua` 已成为 119 行引擎壳，6 个 chunk locals，彻底离开 Lua 200 locals 风险区。
+2. 输入、场景、绘制、营地世界、资源、音频、持久化和仪式已有清晰文件边界。
+3. `draw/*` 基本只读状态；存档提交集中在 `scene_flow.finishDiary()`。
+4. 三个复杂仪式独立且数据驱动，新增仪式不需要把 phase 分支塞回 main。
+5. 桌面 source 与 dist 都能跑完整 playtest；本地 3DS 预检有独立闸门。
+6. 真机兼容约束集中在 Assets/Audio/部署脚本，而不是散落在 scene/draw。
+
+#### 风险与技术债（按优先级）
+
+**P0 — 测试会污染真实桌面存档**
+
+`playtest.lua` 最后走真实 `Persist.commitTrip()`；每跑一次会增加本地 `save.json` 的 trips、
+fruit 等累计。测试虽然确定性地覆盖首次选角，但不是隔离测试。后续应增加
+`Persist.bindStorage()`、测试 identity 或内存存储，让 playtest 不修改玩家存档。
+
+**P0 — 分步预加载目前没有接入主循环**
+
+`camp_preload.lua` 提供 `begin/runSlice`，但当前 `scene_flow.goPlay()` 直接调用
+`CampPreload.ensure()`；`main.update()` 也未在 depart 场景运行 slice。因此真机可能重新出现
+“出发页按 A 后同步卡住”的旧问题。应恢复 depart 提前 `begin()` + update `runSlice()`，
+并保留未 ready 时的转场保护。
+
+**P1 — 全局注册与 Host 注入混用**
+
+`main.lua` 把 17 个模块挂到全局，很多模块不 require 依赖而直接读取 `_G`；
+`bindings.lua` 又负责显式 Host 注入。当前可运行，但依赖图无法仅从 require 看全，
+初始化顺序也成为隐式契约。近期不要机械“全改 local”；应逐模块迁移并保持 playtest。
+
+当前可定位的具体边界偏差：
+
+- `draw/story.lua` 调用 `GearPlay.diaryTripLines()`：表现层向玩法层取摘要，而非消费预制 DTO。
+- `input.lua` 直接写 `Runtime.cupKind/cupPick`：输入层兼有少量状态 reducer 职责。
+- `gear_play.lua` 直接调用 `Time.index()`：玩法模块没有完全经 Host 获取时钟。
+- `scene_flow.lua` 直接调用 `Audio.*`，且 `Flow.syncSceneBgm()` 与
+  `Audio.syncSceneBgm()` 存在两套场景音频映射。
+- `playtest.lua` 会直接操作 ritual 内部字段和 `State.save.data`，测试契约与实现细节耦合。
+
+这些是现状记录，不要求下一位 Agent 一次性清零；修改相关模块时才顺手收敛，并保持
+source/dist 两套 41 步 playtest 均 PASS。
+
+**P1 — 状态不是单一真源**
+
+`State`、`Runtime`、Time/CampMap/CampWorld/Assets/Audio 私有 upvalue 都持有状态。
+生命周期边界基本合理，但旧 SPEC 中“所有状态写进 State”的表述已不符合现状。
+后续若统一状态，应按领域聚合迁移，禁止一次性大搬家。
+
+**P1 — 真机静态模式与 critter flag 可能矛盾**
+
+`Runtime.critterFx` 在 3DS 上为 true，但 `main.update()` 用 `not R.staticPlayFx` 包住全部
+`CampWorld.updateFish/updateCritters/updateNight`。静态模式下可能绘制已启用、更新却停住。
+需要真机日志/画面验证后决定将各 update 独立按 flag 控制。
+
+**P1 — source / dist 双份代码和资产会漂移**
+
+`game/` 是源码权威，`dist/3ds/CampingTrip/game/` 是部署镜像；两者目前靠脚本或手动同步，
+Git 会记录大量重复文件。Agent 应修改 `game/`，验收后再用部署流程刷新 dist，不要反向编辑。
+
+**P2 — 文件边界仍可继续优化**
+
+`drip_brew`、`fish_rod`、`tea_brew` 都超过 400 行，但 locals 数仅 8，当前没有硬性拆分需求。
+若仪式继续增长，可把 catalog、口感计算、draw 分开；不要只为行数拆出无语义小文件。
+
+**P2 — 少量残留与脆弱校验**
+
+- `Runtime.departPendingPlay` 当前没有消费者，可在确认无真机分步加载恢复需求后删除。
+- `verify-3ds-install.py` 仍通过源码文本特征做部分架构检查，重命名 API 时需要同步更新。
+- 当前以 integration playtest 为主，没有独立模块单测；纯函数（口感、钓鱼结算、JSON）
+  未来适合增加轻量 Lua 测试。
+
+### 14.7.1 与早期目标文件的对照
+
+| §4 早期目标 | 当前实现 |
+|-------------|----------|
+| `host.lua` | `bindings.lua` + `session.lua` 的二级 Host |
+| `constants.lua` | `runtime.lua` 的 gear + `asset_paths.lua` 的杯型/路径 |
+| `platform.lua` | `runtime.lua` 的 `isConsole/staticPlayFx/...` |
+| `player.lua` | `session.tryMove()` + `draw/play.playerAt()` |
+| `scenes/play.lua` | 没有单独文件；逻辑分布在 main update、session、gear |
+| `draw/play_top.lua` | `camp_render.drawPlayTop()` + `draw/play.lua` |
+| 单一 `State.time.*` | `time.lua` 私有时钟状态 |
+| main ≤30 locals | 当前 **6 locals**，已达标 |
+
+### 14.8 新 Agent 快速阅读顺序
+
+只处理一般玩法/UI 时，建议按以下顺序，通常 10 分钟内能建立上下文：
+
+1. 本节 §14（当前快照与风险）。
+2. `game/main.lua`（启动和每帧总入口）。
+3. `game/runtime.lua` + `game/state.lua`（先分清状态生命周期）。
+4. `game/bindings.lua`（理解隐式依赖和 Host）。
+5. 按任务选择：
+   - 场景：`scene_flow.lua` + `scenes/*`
+   - 输入：`input.lua`
+   - 营地动作：`session.lua` + `gear_play.lua`
+   - 绘制：`draw/init.lua` → 对应 draw 文件
+   - 世界：`camp_map/world/render/preload`
+   - 仪式：对应 `*_brew.lua` / `fish_rod.lua` + 子 SPEC
+6. `playtest.lua`（确认现有覆盖和宿主代理字段）。
+7. 真机相关再读 `项目背景.md`、3DS 踩坑文档和 deploy/verify 脚本。
+
+### 14.9 修改后的最低验收
+
+```bash
+cd /Users/ruska/projects/3ds/linjian
+
+# 所有 Lua 文件语法
+for f in game/*.lua game/draw/*.lua game/scenes/*.lua; do
+  /opt/homebrew/opt/lua/bin/luac -p "$f" || exit 1
+done
+
+# locals 门禁
+python3 scripts/count-lua-locals.py game/main.lua
+
+# 完整桌面流程
+love game --playtest
+
+# 只检查源码和本地 dist；插着旧 SD 时避免把旧卡状态算进本轮
+python3 scripts/verify-3ds-install.py --skip-sd
+```
+
+若本轮实际部署到 SD，必须改用：
+
+```bash
+python3 scripts/verify-3ds-install.py --require-sd
+```
+
+只有输出 `RESULT PASS` 才能宣布真机包可用。不要把桌面 playtest PASS 等同于真机验证。
+
+---
+
+*文档版本：2026-08-31 13:47 UTC+8 · 当前快照对齐 buildId `2026-08-31-dev071-p7-p8`*

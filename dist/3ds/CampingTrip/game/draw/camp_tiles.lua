@@ -163,7 +163,19 @@ function CampTiles.drawProp(t, px, py, tx, ty)
     end
   elseif t == 5 then
     local tentOpen = host.getTentOpen and host.getTentOpen()
-    local img = tentOpen and (assets.tentOpen or assets.tent) or (assets.tentPacked or assets.tent)
+    local assets = assets
+    local img
+    if host.getTentStyle then
+      local c, s, d = host.getTentStyle()
+      if tentOpen then
+        local key = TentGear.pitchKey(c, s, d)
+        img = assets.tentPitch and assets.tentPitch[key]
+      else
+        local pack = TentGear.packKey(c)
+        img = assets.tentPack and assets.tentPack[pack]
+      end
+    end
+    img = img or (tentOpen and (assets.tentOpen or assets.tent) or (assets.tentPacked or assets.tent))
     if img then
       local iw, ih = img:getWidth(), img:getHeight()
       CampTiles.drawDropShadow(px, py, "lg")

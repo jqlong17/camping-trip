@@ -116,12 +116,16 @@ function Persist.commitTrip()
   local snap = {
     fruit = haul.fruit or 0,
     coffee = haul.coffee or 0,
+    tea = haul.tea or 0,
+    meals = haul.meals or 0,
     fish = fish,
   }
   local saveData = State.save.data
   saveData.trips = (saveData.trips or 0) + 1
   saveData.totals.fruit = (saveData.totals.fruit or 0) + snap.fruit
   saveData.totals.coffee = (saveData.totals.coffee or 0) + snap.coffee
+  saveData.totals.tea = (saveData.totals.tea or 0) + (snap.tea or 0)
+  saveData.totals.meals = (saveData.totals.meals or 0) + (snap.meals or 0)
   saveData.totals.fish = saveData.totals.fish or Persist.emptyFishCounts()
   for k, v in pairs(fish) do
     saveData.totals.fish[k] = (saveData.totals.fish[k] or 0) + v

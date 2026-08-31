@@ -13,7 +13,7 @@ DOCS = ROOT / "docs" / "promo"
 GEN_BG = Path("/Users/ruska/.cursor/projects/Users-ruska-projects-3ds/assets/pack_bg_gen.png")
 GEN_SHEET = Path("/Users/ruska/.cursor/projects/Users-ruska-projects-3ds/assets/gear_sheet_gen.png")
 
-GEAR_IDS = ["tent", "drip", "pot", "rod", "cup", "fan"]
+GEAR_IDS = ["tent", "drip", "tea", "rod", "cup", "cook"]
 ICON_W, ICON_H = 48, 40
 
 

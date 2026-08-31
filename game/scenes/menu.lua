@@ -1,0 +1,17 @@
+local Menu = {}
+
+function Menu.move(runtime, delta)
+  runtime.menuIndex = ((runtime.menuIndex - 1 + delta) % #State.menu.items) + 1
+  Audio.playSfx("ui_move")
+end
+
+function Menu.hit(lx, ly)
+  local x0, w = 40, 240
+  local y0, stride = 36, 36
+  for i = 1, #State.menu.items do
+    local y = y0 + (i - 1) * stride
+    if lx >= x0 and lx <= x0 + w and ly >= y and ly <= y + 32 then return i end
+  end
+end
+
+return Menu

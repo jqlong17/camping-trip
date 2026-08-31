@@ -96,7 +96,7 @@ LovePotion / 桌面 LÖVE：`require("drip_brew")`（与 `main.lua` 同目录）
 | `temps` | `ritual/temp_{c}.png` | 用摄氏度数字 |
 | `pours` | `ritual/pours_{n}.png` | |
 | （滤纸） | `ritual/drip_paper.png` | |
-| （冲煮帧） | `ritual/drip_1..3.png` | brewStep |
+| （冲煮帧） | `ritual/drip/drip_1..3.png` | brewStep；**160×120** 铺满 4:3，上屏真居中 |
 
 豆子项需带口感基底：`acid, sweet, body, bitter`。  
 滤杯/研磨/水温/冲次的修正写在 `DripBrew.computeTaste` 的**小表**（按 id），不要散落 if。

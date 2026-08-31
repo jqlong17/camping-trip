@@ -122,5 +122,6 @@ def load_gen(name: str, promo_name: str | None = None) -> Image.Image:
         raise FileNotFoundError(f"missing gen sheet: {src}")
     im = Image.open(src).convert("RGBA")
     PROMO.mkdir(parents=True, exist_ok=True)
-    im.save(PROMO / (promo_name or name.replace(".png", "_gen_ref.png")))
+    out_name = promo_name or f"{src.stem}_ref.png"
+    im.save(PROMO / out_name)
     return im

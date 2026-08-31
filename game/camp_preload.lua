@@ -149,8 +149,9 @@ local function makeSteps()
   end)
   add(function()
     local a = assets()
-    a.tent = load(AP.forestCamp("tile_tent.png"))
-    a.tentOpen = load(AP.forestCamp("tile_tent_open.png")) or a.tent
+    -- 地图只使用装备格里的米白尖顶帐篷：透明底、单一款式。
+    a.tent = load(AP.gearPath("tent"))
+    a.tentOpen = a.tent
     a.tentPacked = load(AP.forestCamp("tile_tent_packed.png"))
     a.firepit = load(AP.forestCamp("prop_firepit.png"))
   end)

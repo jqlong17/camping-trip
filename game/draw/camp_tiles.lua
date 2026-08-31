@@ -51,7 +51,18 @@ function CampTiles.drawGround(t, px, py, tx, ty)
     end
     return
   end
-  if t == 7 and assets.dirt and assets.dirt[(tx * 3 + ty * 5) % 4] then
+  -- 帐篷格(5)只表示道具层；地面仍用搭帐前的土地，避免误画成整格绿草
+  local ground = t
+  if t == 5 then
+    ground = 7
+    if host.getTentPos then
+      local tp = host.getTentPos()
+      if tp and tp.x == tx and tp.y == ty and tp.ground then
+        ground = tp.ground
+      end
+    end
+  end
+  if ground == 7 and assets.dirt and assets.dirt[(tx * 3 + ty * 5) % 4] then
     love.graphics.draw(assets.dirt[(tx * 3 + ty * 5) % 4], px, py)
     if assets.dirtFringe then
       if CM.isMeadow(CM.tileAt(tx, ty - 1)) and assets.dirtFringe.N then love.graphics.draw(assets.dirtFringe.N, px, py) end
@@ -163,11 +174,23 @@ function CampTiles.drawProp(t, px, py, tx, ty)
     end
   elseif t == 5 then
     local tentOpen = host.getTentOpen and host.getTentOpen()
-    local img = tentOpen and (assets.tentOpen or assets.tent) or (assets.tentPacked or assets.tent)
+    local img = tentOpen and (assets.tentOpen or assets.tent) or assets.tentPacked
     if img then
+      love.graphics.setColor(1, 1, 1, 1)
       local iw, ih = img:getWidth(), img:getHeight()
-      CampTiles.drawDropShadow(px, py, "lg")
-      love.graphics.draw(img, px + (TILE - iw) / 2, py + TILE - ih + 2)
+      CampTiles.drawDropShadow(px, py, "sm")
+      -- 碰撞仍占一格，视觉放大到约 1.75 格，保持地图上清楚可辨。
+      local targetW, targetH = TILE * 1.75, TILE * 1.6
+      local scale = math.min(targetW / math.max(iw, 1), targetH / math.max(ih, 1))
+      -- gear/tent.png 的实体底边在源图 y=37/40，画布底部另有透明留白。
+      -- 按实体底边而非整张画布落地，并下压 1px，避免帐篷悬空。
+      local opaqueBottom = ih * (37 / 40)
+      love.graphics.draw(
+        img,
+        px + (TILE - iw * scale) / 2,
+        py + TILE + 1 - opaqueBottom * scale,
+        0, scale, scale
+      )
     end
   end
 end

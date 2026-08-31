@@ -47,7 +47,11 @@ function Playtest.tick(dt)
     Playtest.t = 0
   end
 
-  if s == 0 and t > 0.35 then Playtest.shot("01_title"); nextStep()
+  if s == 0 and t > 0.35 then
+    -- Playtest 必须与用户已有存档无关，完整覆盖序章与首次选角。
+    State.save.data.castChosen = false
+    Playtest.shot("01_title")
+    nextStep()
   elseif s == 1 and t > 0.25 then E.menuIndex = 1; E.confirmMenu(); Playtest.log("-> " .. E.scene); nextStep()
   elseif s == 2 and t > 0.35 then Playtest.shot("02_prologue"); nextStep()
   elseif s == 3 and t > 0.2 then E.advancePrologue(); nextStep()
@@ -89,8 +93,15 @@ function Playtest.tick(dt)
   elseif s == 14 and t > 0.25 then
     E.player.x, E.player.y = 10, 9
     E.selected = 1
-    E.tryUseGear()
-    Playtest.log("tentOpen=" .. tostring(E.tentOpen) .. " at=" .. tostring(E.tentPos.x) .. "," .. tostring(E.tentPos.y))
+    E.tryUseGear() -- start tent pick
+    for _ = 1, 8 do
+      if not E.ritual or E.ritual.kind ~= "tent" then break end
+      if E.ritual.phase == "color" then E.ritual.pick = 2 end -- pine
+      if E.ritual.phase == "style" then E.ritual.pick = 2 end -- tunnel
+      if E.ritual.phase == "door" then E.ritual.pick = 2 end -- ajar
+      E.tryUseGear()
+    end
+    Playtest.log("tentOpen=" .. tostring(E.tentOpen) .. " at=" .. tostring(E.tentPos and E.tentPos.x) .. "," .. tostring(E.tentPos and E.tentPos.y) .. " style=" .. tostring(E.tentStyleI) .. " color=" .. tostring(E.tentColorI) .. " door=" .. tostring(E.tentDoorI))
     nextStep()
   elseif s == 15 and t > 0.35 then Playtest.shot("05b_tent_open"); nextStep()
   elseif s == 16 and t > 0.2 then
@@ -113,9 +124,11 @@ function Playtest.tick(dt)
     nextStep()
   elseif s == 18 and t > 0.15 then
     E.selected = 5
-    for _ = 1, 10 do
-      if E.coffeeCups >= 3 then break end
-      if E.cupPick then
+    for _ = 1, 16 do
+      if E.coffeeCups >= 3 and not E.ritual then break end
+      if E.ritual and E.ritual.kind == "cup_sip" then
+        E.tryUseGear()
+      elseif E.cupPick then
         E.cupStyle = (E.cupStyle % E.cupStylesCount) + 1
         E.applyCupIcon()
         E.drinkFromCup()

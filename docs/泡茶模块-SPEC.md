@@ -100,16 +100,17 @@ API 形态对齐 `DripBrew`：`TeaBrew.bind` / `start` / `advance` / `nudge` / `
 
 | catalog | 文件 |
 |---------|------|
-| leaves | `ritual/leaf_{id}.png` |
-| amounts | `ritual/tea_amount_{id}.png` |
-| wares | `ritual/ware_{id}.png` |
-| temps | `ritual/tea_temp_{c}.png` |
-| steeps | `ritual/tea_steeps_{n}.png` |
-| rinse | `ritual/tea_rinse.png` |
-| brew 帧 | `ritual/tea_1.png` … `tea_3.png` |
+| leaves | `ritual/tea/leaf_{id}.png`（**按件文生图**；袋面不写汉字，名称归 Lua） |
+| amounts | `ritual/tea/tea_amount_{id}.png` |
+| wares | `ritual/tea/ware_{id}.png`（按件；标签归 Lua） |
+| temps | `ritual/tea/tea_temp_{c}.png` |
+| steeps | `ritual/tea/tea_steeps_{n}.png` |
+| rinse | `ritual/tea/tea_rinse.png` |
+| brew 帧 | `ritual/tea/tea_1.png` … `tea_3.png` |
 | 背包图标 | `assets/gear_tea.png` |
 
-文生图须经硬像素限色后进 `game/assets`；参考图放 `docs/promo/`。
+文生图：一件一图 → `docs/promo/*_gen_ref.png` → `scripts/build-tea-brew-assets.py` 只做硬像素；**禁止**一张 sheet 切五袋再靠袋面字认种。  
+下屏选参：槽内只显示 `name`（`printf` 居中限宽），`note` 在底栏单行；与帐篷/做饭选参一致。
 
 ---
 

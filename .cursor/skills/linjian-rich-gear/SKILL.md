@@ -12,6 +12,7 @@ disable-model-invocation: false
 
 仓库根：`/Users/ruska/projects/3ds/linjian`  
 金标准：**手冲**（DEV-064/065）与 **泡茶**（DEV-066）的深度。新内容不得明显更薄。
+新增装备交付前必须过 **`linjian-gear-parity`** 评分表（≥16/20 才标 A / done）。
 
 必联读：
 
@@ -29,7 +30,9 @@ disable-model-invocation: false
 3. **参数要有结果**：选择须影响文案、口感/氛围短句、地图可见态，或日记计数——不能纯装饰。  
 4. **可反复 / 可并存**：能重做的就重做（再冲/再泡）；多壶多灯状态不要互相踩死。  
 5. **模块化**：逻辑进 `game/<topic>_*.lua` + `PHASES`/catalog 表；`main.lua` 只 bind / 入口 / 输入路由。  
-6. **文生图必须过像素锁**：统一 prompt 锁（见下）→ `docs/promo/*_gen_ref.png` → 切硬像素进 `game/assets` → `audit-pixel-style.py`。
+6. **文生图必须过像素锁**：统一 prompt 锁（见下）→ `docs/promo/*_gen_ref.png` → 切硬像素进 `game/assets` → `audit-pixel-style.py`。  
+   - **目录类图标（茶/豆/茶器等）优先「一件一图」**；袋面勿烘焙汉字，名称与备注一律 Lua。  
+   - **禁止**一张横排 sheet 切完再靠图内字认选项。  
 7. **禁止 PIL 程序画展示图**：凡玩家会看见的 PNG（装备、杯子、仪式选参、特写帧、角色、分镜、世界生物、背包 UI 图标）**不得**用 `ImageDraw` / 逐像素 `put()` 从零绘制。项目有 **GenerateImage / 文生图** 能力时，必须先 gen → 存 `docs/promo/` → `build-*-assets.py` **只做切图、nearest 缩放、限色、透明裁边**。不得以「赶进度、占位、脚本快」为由跳过文生图。
 
 若用户说「随便加点」而主题属于装备/仪式：仍按本 skill 拉满一档丰富度，并在回复里说明对标手冲。
@@ -145,17 +148,19 @@ Lua chunk **200 locals**：新表放模块全局/表字段，勿继续堆 `main`
 | 脚本 | 产出路径 | 说明 |
 |------|----------|------|
 | `scripts/build-cups.py` | `assets/cups/cup_*.png`, `gear/cup.png` | **文生图** sheet 切图 |
-| `scripts/build-fish-rod-assets.py` | `ritual/fish/spot_*.png` 等 | **全程序**选参图标 |
-| `scripts/build-harvest-assets.py` | `ritual/fish/fish_1..4.png` 等 | 钓鱼仪式帧 |
-| `scripts/build-critters.py` | `scenes/forest/world/` 鸟虫 | 世界小精灵 |
-| `scripts/build-camp-life-assets.py` | `shared/tile_tree8-11.png` | 额外树 tile（角色已禁覆盖） |
-| `scripts/build-ground-tiles.py` | `scenes/forest/camp/tile_*.png` | 草地/泥地 16×16 |
-| `scripts/build-creek-tiles.py` | 溪水/岸 tile | 同上 |
-| `scripts/build-drip-brew-assets.py` | `grind_*`, `temp_*`, `pours_*`, `paper` | **部分**程序；滤杯/豆已 gen |
+| `scripts/build-fish-rod-assets.py` | `ritual/fish/spot_*.png` 等 | **文生图** sheet 切图 |
+| `scripts/build-harvest-assets.py` | `ritual/fish/fish_1..4.png` 等 | **文生图** 仪式帧（fruit/fish icon 暂保留旧图） |
+| `scripts/build-critters.py` | `scenes/forest/world/` 鸟虫 | **文生图** sheet 切图 |
+| `scripts/build-camp-life-assets.py` | `shared/tile_tree8-11.png` | **文生图** 额外树（角色已禁覆盖） |
+| `scripts/build-ground-tiles.py` | `scenes/forest/camp/tile_*.png` | **文生图** 草地/泥地；fringe 为边缘叠加 |
+| `scripts/build-creek-tiles.py` | 溪水/岸 tile | **文生图** 水/浅水；岸为抠透明叠加 |
+| `scripts/build-drip-brew-assets.py` | `pours_*`, `paper` | **部分**程序；滤杯/豆/研磨/**水温**已 gen |
 | `scripts/build-tea-brew-assets.py` | `amount_*`, `temp_*`, `steeps_*`, `rinse` | **部分**程序；茶叶/ ware 已 gen |
 | `scripts/enforce-pixel-style.py` | 缺图时 gear 占位 | 应急兜底，新资源勿依赖 |
 
-**已走文生图（金标准）**：`build-drip-brew-assets`（滤杯/豆/手冲帧）、`build-tea-brew-assets`（茶叶/茶具/泡茶帧）、`build-pack-ui-from-gen.py`、分镜/标题 promo 管线、`build-cia-icon.py`（从 gen 源像素锁）。
+**已走文生图（金标准）**：杯子、钓鱼选参/仪式帧、鸟虫、额外树、草地/泥地/溪水、`build-drip-brew-assets`（滤杯/豆/手冲帧）、`build-tea-brew-assets`（茶叶/茶具/泡茶帧）、`build-pack-ui-from-gen.py`、分镜/标题 promo 管线、`build-cia-icon.py`（从 gen 源像素锁）。
+
+仍偏程序/保留：`dirt_fringe_*`（边缘叠加）、手冲/泡茶部分选参小标、`enforce` 缺图兜底、fruit/fish_icon（harvest 未重做）。
 
 新增或重做上述任一类资源时：**先 gen ref，再改 build 脚本为纯切图**；不要扩写 ImageDraw 分支。
 

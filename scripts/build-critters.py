@@ -1,139 +1,92 @@
 #!/usr/bin/env python3
-"""Tiny readable wildlife sprites for 露营之旅."""
+"""Build forest wildlife sprites from text-to-image sheets."""
+from __future__ import annotations
+
 from pathlib import Path
+
+import numpy as np
 from PIL import Image
 
 from asset_layout import FOREST_WORLD
+from gen_slice_common import hard_fit, load_gen, slice_equal, slice_grid, slice_runs
 
 OUT = FOREST_WORLD
-OUT.mkdir(parents=True, exist_ok=True)
 
 
-def blank(w, h):
-    return Image.new("RGBA", (w, h), (0, 0, 0, 0))
+def kill_corner_bg(im: Image.Image, thr: int = 42) -> Image.Image:
+    """Remove near-uniform sheet background sampled from corners."""
+    a = np.array(im.convert("RGBA"))
+    h, w = a.shape[:2]
+    samples = [
+        a[2, 2, :3],
+        a[2, w - 3, :3],
+        a[h - 3, 2, :3],
+        a[h - 3, w - 3, :3],
+        a[h // 2, 2, :3],
+        a[h // 2, w - 3, :3],
+    ]
+    bg = np.median(np.stack(samples), axis=0)
+    dist = np.abs(a[:, :, :3].astype(int) - bg.astype(int)).sum(axis=2)
+    a[dist < thr, 3] = 0
+    # also kill classic cream / dark voids
+    r, g, b = a[:, :, 0], a[:, :, 1], a[:, :, 2]
+    cream = (r > 230) & (g > 220) & (b > 200)
+    dark = (r < 22) & (g < 22) & (b < 22)
+    a[cream | dark, 3] = 0
+    return Image.fromarray(a)
 
 
-def put(im, pts):
-    px = im.load()
-    for x, y, c in pts:
-        if 0 <= x < im.width and 0 <= y < im.height:
-            px[x, y] = c
-
-
-def save(name, im):
+def save(name: str, im: Image.Image) -> None:
+    OUT.mkdir(parents=True, exist_ok=True)
     path = OUT / name
     im.save(path)
-    print(name, im.size)
+    print(f"  {path.name} {im.size}")
 
 
-# palettes: body, wing, belly, beak, eye
-BIRDS = [
-    ((118, 78, 48), (86, 54, 32), (196, 168, 120), (220, 140, 50), (20, 16, 12)),  # sparrow
-    ((62, 110, 168), (40, 72, 128), (180, 210, 230), (230, 170, 60), (20, 16, 12)),  # blue
-    ((214, 176, 52), (168, 120, 28), (244, 228, 150), (80, 56, 28), (20, 16, 12)),  # yellow
-]
+def main() -> int:
+    print("critters from gen → scenes/forest/world/")
+    birds = load_gen("critters_birds_sheet_gen.png")
+    cells = slice_grid(birds, 3, 3, pad=0.06)
+    names = []
+    for i in range(3):
+        names += [
+            f"bird_{i}_perch.png",
+            f"bird_{i}_fly0.png",
+            f"bird_{i}_fly1.png",
+        ]
+    sizes = [(12, 10), (14, 10), (14, 10)] * 3
+    for name, cell, (w, h) in zip(names, cells, sizes):
+        save(name, hard_fit(kill_corner_bg(cell), w, h, 20))
 
+    bugs = load_gen("critters_bugs_sheet_gen.png")
+    parts = slice_runs(bugs)
+    if len(parts) != 6:
+        parts = slice_equal(bugs, 6, pad=0.05)
+    # nest still from sheet; flying insects are per-item below
+    if parts:
+        save("nest.png", hard_fit(kill_corner_bg(parts[0], thr=38), 14, 10, 18))
 
-def bird_perch(pal):
-    b, w, belly, beak, eye = pal
-    im = blank(12, 10)
-    put(im, [
-        (3, 4, w), (4, 3, b), (5, 3, b), (6, 3, b), (7, 4, b),
-        (3, 5, b), (4, 4, b), (5, 4, belly), (6, 4, b), (7, 5, b), (8, 5, b),
-        (4, 5, belly), (5, 5, belly), (6, 5, b), (7, 6, w),
-        (4, 6, b), (5, 6, b), (6, 6, b),
-        (8, 4, beak), (2, 6, w), (1, 6, w),
-        (5, 3, eye), (5, 8, (70, 48, 28, 255)), (6, 8, (70, 48, 28, 255)),
-    ])
-    return im
+    from gen_slice_common import GEN_ASSETS
 
-
-def bird_fly(pal, up=True):
-    b, w, belly, beak, eye = pal
-    im = blank(14, 10)
-    wing = [(4, 1, w), (5, 2, w), (3, 2, w)] if up else [(4, 7, w), (5, 6, w), (3, 6, w)]
-    put(im, [
-        (6, 3, b), (7, 3, b), (8, 3, b), (9, 4, b),
-        (5, 4, b), (6, 4, belly), (7, 4, b), (8, 4, b),
-        (6, 5, b), (7, 5, b), (8, 5, w),
-        (10, 4, beak), (7, 3, eye),
-        (4, 4, w), (3, 4, w),
-    ] + wing)
-    return im
-
-
-def nest():
-    im = blank(10, 7)
-    twig = (118, 82, 42, 255)
-    dark = (72, 48, 24, 255)
-    egg = (236, 224, 196, 255)
-    put(im, [
-        (1, 4, twig), (2, 3, twig), (3, 3, twig), (4, 2, twig), (5, 2, twig),
-        (6, 3, twig), (7, 3, twig), (8, 4, twig),
-        (2, 4, dark), (3, 4, dark), (4, 4, dark), (5, 4, dark), (6, 4, dark), (7, 4, dark),
-        (3, 5, twig), (4, 5, twig), (5, 5, twig), (6, 5, twig),
-        (4, 3, egg), (6, 3, egg),
-    ])
-    return im
-
-
-def butterfly(frame):
-    im = blank(9, 8)
-    body = (48, 36, 24, 255)
-    w1 = (220, 120, 170, 255) if frame == 0 else (236, 180, 80, 255)
-    w2 = (160, 70, 130, 255) if frame == 0 else (196, 130, 40, 255)
-    open_w = frame == 0
-    put(im, [
-        (4, 2, body), (4, 3, body), (4, 4, body), (4, 5, body),
-        (3, 2, (20, 16, 12, 255)), (5, 2, (20, 16, 12, 255)),
-    ])
-    if open_w:
-        put(im, [
-            (1, 2, w1), (2, 2, w1), (2, 3, w2), (1, 3, w2),
-            (6, 2, w1), (7, 2, w1), (6, 3, w2), (7, 3, w2),
-            (2, 4, w1), (6, 4, w1),
-        ])
-    else:
-        put(im, [(3, 3, w1), (5, 3, w1), (3, 4, w2), (5, 4, w2)])
-    return im
-
-
-def dragonfly():
-    im = blank(12, 6)
-    body = (40, 120, 88, 255)
-    wing = (200, 230, 230, 180)
-    put(im, [
-        (1, 2, body), (2, 2, body), (3, 2, body), (4, 2, (30, 80, 60, 255)),
-        (5, 2, body), (6, 2, body), (7, 2, body), (8, 2, (220, 80, 70, 255)),
-        (3, 1, wing), (4, 1, wing), (3, 3, wing), (4, 3, wing),
-        (6, 1, wing), (7, 1, wing), (6, 3, wing), (7, 3, wing),
-    ])
-    return im
-
-
-def firefly(on):
-    im = blank(6, 6)
-    body = (40, 48, 28, 255)
-    glow = (220, 240, 90, 220) if on else (120, 140, 50, 160)
-    put(im, [(2, 2, body), (3, 2, body), (2, 3, glow), (3, 3, glow)])
-    if on:
-        put(im, [(1, 3, (220, 240, 90, 80)), (4, 3, (220, 240, 90, 80))])
-    return im
-
-
-def main():
-    for i, pal in enumerate(BIRDS):
-        save(f"bird_{i}_perch.png", bird_perch(pal))
-        save(f"bird_{i}_fly0.png", bird_fly(pal, True))
-        save(f"bird_{i}_fly1.png", bird_fly(pal, False))
-    save("nest.png", nest())
-    save("butterfly_0.png", butterfly(0))
-    save("butterfly_1.png", butterfly(1))
-    save("dragonfly.png", dragonfly())
-    save("firefly_0.png", firefly(False))
-    save("firefly_1.png", firefly(True))
+    # 蝴蝶 / 蜻蜓 / 萤火虫：按件文生图，分辨率提到营地可读
+    insect_specs = [
+        ("butterfly_0.png", "butterfly_wing_open_gen.png", 36, 30),
+        ("butterfly_1.png", "butterfly_wing_closed_gen.png", 36, 30),
+        ("dragonfly.png", "dragonfly_gen.png", 36, 18),
+        ("firefly_0.png", "firefly_0_gen.png", 14, 14),
+        ("firefly_1.png", "firefly_1_gen.png", 14, 14),
+    ]
+    for out_name, stem, w, h in insect_specs:
+        src = GEN_ASSETS / stem
+        if not src.is_file():
+            raise SystemExit(f"missing insect gen: {src}")
+        save(
+            out_name,
+            hard_fit(kill_corner_bg(load_gen(stem, stem.replace(".png", "_ref.png")), thr=48), w, h, 24),
+        )
     print("done")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

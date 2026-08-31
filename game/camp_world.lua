@@ -251,10 +251,10 @@ function CampWorld.drawCritters()
     elseif u.kind == "butterfly" and assets.butterfly then
       love.graphics.setColor(1, 1, 1, 1)
       local img = assets.butterfly[(math.floor(u.t * 8) % 2) + 1]
-      if img then love.graphics.draw(img, u.x, u.y, 0, 2, 2) end
+      if img then love.graphics.draw(img, u.x, u.y, 0, 1, 1) end
     elseif u.kind == "dragonfly" and assets.dragonfly then
       love.graphics.setColor(1, 1, 1, 1)
-      love.graphics.draw(assets.dragonfly, u.x, u.y, 0, 2, 2)
+      love.graphics.draw(assets.dragonfly, u.x, u.y, 0, 1, 1)
     end
   end
   love.graphics.setColor(1, 1, 1, 1)
@@ -333,15 +333,23 @@ function CampWorld.drawNightSky()
     end
   end
   if host.isNight() then
+    local assets = host.Assets.get()
     for _, u in ipairs(critters.bugs) do
       if u.kind == "firefly" then
         local blink = 0.35 + 0.65 * (0.5 + 0.5 * math.sin(u.t * 7))
         local x, y = math.floor(u.x + 0.5), math.floor(u.y + 0.5)
-        love.graphics.setColor(1, 0.92, 0.45, blink * 0.35)
-        love.graphics.rectangle("fill", x - 1, y, 4, 2)
-        love.graphics.rectangle("fill", x, y - 1, 2, 4)
-        love.graphics.setColor(1, 0.98, 0.62, blink)
-        love.graphics.rectangle("fill", x, y, 2, 2)
+        local imgs = assets.firefly
+        local img = imgs and imgs[(math.floor(u.t * 6) % 2) + 1]
+        if img then
+          love.graphics.setColor(1, 1, 1, blink)
+          love.graphics.draw(img, x - img:getWidth() / 2, y - img:getHeight() / 2, 0, 1, 1)
+        else
+          love.graphics.setColor(1, 0.92, 0.45, blink * 0.35)
+          love.graphics.rectangle("fill", x - 1, y, 4, 2)
+          love.graphics.rectangle("fill", x, y - 1, 2, 4)
+          love.graphics.setColor(1, 0.98, 0.62, blink)
+          love.graphics.rectangle("fill", x, y, 2, 2)
+        end
       end
     end
   end

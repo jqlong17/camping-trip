@@ -17,3 +17,4 @@
 790994__guillermo_de_la_matera__…abasto-forest.wav — amb_birds (guillermo_de_la_matera)
 479041__felixblume__crickets-during-the-night….wav — amb_crickets (felixblume)
 741686__robertcrosley__small-tributary….wav — amb_creek (robertcrosley)
+741686__robertcrosley__small-tributary….wav — audio/3ds/amb_creek.mp3 真机副本（22050 Hz mono 64k）

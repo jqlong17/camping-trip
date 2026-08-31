@@ -1,33 +1,19 @@
 #!/usr/bin/env python3
-"""Rebuild creek water / shallow / shore tiles for softer riverbanks (16×16 hard pixel)."""
+"""Rebuild creek water / shallow / shore tiles from text-to-image sheets."""
 from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 from PIL import Image
 
-ROOT = Path(__file__).resolve().parents[1]
 from asset_layout import FOREST_CAMP
+from gen_slice_common import hard_fit, hard_tile, load_gen, quantize_rgba, slice_grid
 
 OUT = FOREST_CAMP
 BAK = OUT / "_creek_v1"
 
-# Palette — camping creek, not neon pool
-DEEP = (28, 96, 158)
-DEEP_D = (18, 72, 128)
-MID = (42, 132, 188)
-LIGHT = (96, 178, 216)
-SPARK = (232, 246, 255)
-FOAM = (186, 220, 232)
-SHALLOW = (64, 158, 168)
-SHALLOW_L = (110, 186, 186)
-PEBBLE = (148, 128, 86)
-PEBBLE_L = (176, 156, 110)
-SAND = (186, 148, 84)
-SAND_D = (148, 108, 56)
-WET = (120, 108, 72)
-GRASS_LIP = (78, 148, 42)
-GRASS_D = (52, 110, 32)
+SHORE_KEYS = ["E", "W", "N", "S", "NE", "NW", "SE", "SW"]
 
 
 def save(name: str, im: Image.Image) -> None:
@@ -41,170 +27,97 @@ def save(name: str, im: Image.Image) -> None:
     print(f"  {name} {im.size}")
 
 
-def blank() -> Image.Image:
-    return Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+def cell_tile(cell: Image.Image, colors: int = 18) -> Image.Image:
+    w, h = cell.size
+    inset = max(2, min(w, h) // 16)
+    cropped = cell.crop((inset, inset, w - inset, h - inset))
+    return hard_tile(cropped, 16, colors)
+
+
+def to_shore_overlay(cell: Image.Image) -> Image.Image:
+    """Keep sand/wet lip + nearby grass tufts; kill water + sheet checker bg."""
+    w, h = cell.size
+    inset = max(2, min(w, h) // 18)
+    cell = cell.crop((inset, inset, w - inset, h - inset))
+    a = np.array(cell.convert("RGBA"))
+    r = a[:, :, 0].astype(int)
+    g = a[:, :, 1].astype(int)
+    b = a[:, :, 2].astype(int)
+    # checkerboard gray bg
+    checker = (np.abs(r.astype(int) - g) < 18) & (np.abs(g.astype(int) - b) < 18) & (r > 140) & (r < 220)
+    water = (b > r + 15) & (b > g - 5) & (b > 90)
+    # sand / wet bank
+    sand = (r > 110) & (g > 70) & (b < 130) & (r > b + 15) & (r - g < 90)
+    wet = (r > 70) & (r < 170) & (g > 55) & (g < 150) & (b < 110) & (r >= g - 10)
+    grass = (g > r + 12) & (g > b) & (g > 70)
+    keep = sand | wet
+    # grass only near sand/wet band
+    ys, xs = np.where(keep)
+    if len(xs):
+        yy0, yy1 = int(ys.min()), int(ys.max())
+        xx0, xx1 = int(xs.min()), int(xs.max())
+        band = np.zeros_like(keep)
+        band[max(0, yy0 - 2) : min(a.shape[0], yy1 + 3), max(0, xx0 - 2) : min(a.shape[1], xx1 + 3)] = True
+        keep = keep | (grass & band)
+
+    out = a.copy()
+    out[~(keep) | checker | water, 3] = 0
+    im = Image.fromarray(out)
+    # hard fit to 16 keeping transparency
+    mid = im.resize((32, 32), Image.Resampling.BILINEAR)
+    pixel = mid.resize((16, 16), Image.Resampling.NEAREST)
+    # re-kill near-transparent junk
+    pa = np.array(pixel)
+    pa[pa[:, :, 3] < 40, 3] = 0
+    return quantize_rgba(Image.fromarray(pa), 16)
 
 
 def build_water() -> None:
-    for i in range(4):
-        im = Image.new("RGBA", (16, 16), (*DEEP, 255))
-        px = im.load()
-        # depth mottling
-        for y in range(16):
-            for x in range(16):
-                n = (x * 3 + y * 5 + i * 2) % 7
-                if n == 0:
-                    px[x, y] = (*DEEP_D, 255)
-                elif n == 3:
-                    px[x, y] = (*MID, 255)
-        # flowing horizontal bands (phase by frame)
-        for band in (3, 8, 13):
-            yy = (band + i) % 16
-            for x in range(16):
-                if (x + i * 2 + band) % 4 != 0:
-                    px[x, yy] = (*LIGHT, 255)
-                if (x + i) % 5 == 0:
-                    px[x, (yy + 1) % 16] = (*MID, 255)
-        # foam flecks
-        for x, y in ((2 + i, 5), (9, 4 + (i % 2)), (13, 10), (5, 12), (11, 14)):
-            px[x % 16, y % 16] = (*FOAM, 255)
-        # sparkle
-        px[(4 + i * 3) % 16, (6 + i) % 14] = (*SPARK, 255)
-        px[(10 + i * 2) % 16, (11 + i) % 14] = (*SPARK, 255)
-        save(f"tile_water{i}.png", im)
-
-
-def build_shallow() -> None:
-    for i in range(4):
-        im = Image.new("RGBA", (16, 16), (*SHALLOW, 255))
-        px = im.load()
-        for y in range(16):
-            for x in range(16):
-                if (x + y * 2 + i) % 6 == 0:
-                    px[x, y] = (*SHALLOW_L, 255)
-                if y > 10 and (x + i) % 4 == 0:
-                    px[x, y] = (*PEBBLE, 255)
-                if y > 12 and (x + i * 2) % 5 == 2:
-                    px[x, y] = (*PEBBLE_L, 255)
-        # soft surface shimmer
-        yy = 4 + i % 3
-        for x in range(1, 15):
-            if (x + i) % 3:
-                px[x, yy] = (*FOAM, 255)
-        px[3 + i, 7] = (*SPARK, 255)
-        save(f"tile_shallow{i}.png", im)
-
-
-def put(px, x: int, y: int, rgba) -> None:
-    if 0 <= x < 16 and 0 <= y < 16:
-        px[x, y] = rgba
-
-
-def shore_edge(kind: str) -> Image.Image:
-    """Organic jagged shore overlays (transparent elsewhere)."""
-    im = blank()
-    px = im.load()
-    # irregular thickness profile
-    jag = [2, 3, 2, 4, 3, 2, 3, 2, 4, 3, 2, 3, 2, 4, 3, 2]
-
-    def paint_strip(axis: str, outward: int) -> None:
-        # outward: +1 means growing toward high index
-        for i in range(16):
-            w = jag[i]
-            for k in range(w):
-                if axis == "x":  # vertical edge on E/W
-                    x = 15 - k if outward > 0 else k
-                    y = i
-                else:
-                    x = i
-                    y = 15 - k if outward > 0 else k
-                # outer wet sand / dark lip nearest water
-                if k == 0:
-                    put(px, x, y, (*SAND_D, 235))
-                elif k == 1:
-                    put(px, x, y, (*SAND, 230))
-                elif k == w - 1:
-                    put(px, x, y, (*GRASS_LIP, 220))
-                else:
-                    put(px, x, y, (*WET, 220))
-            # occasional pebble / grass tuft on lip
-            if i % 4 == 1:
-                if axis == "x":
-                    put(px, 15 - (w - 1) if outward > 0 else (w - 1), i, (*PEBBLE_L, 255))
-                else:
-                    put(px, i, 15 - (w - 1) if outward > 0 else (w - 1), (*GRASS_D, 255))
-            if i % 5 == 3:
-                if axis == "x":
-                    put(px, 15 if outward > 0 else 0, i, (*FOAM, 180))
-                else:
-                    put(px, i, 15 if outward > 0 else 0, (*FOAM, 180))
-
-    if kind == "E":
-        paint_strip("x", +1)
-    elif kind == "W":
-        paint_strip("x", -1)
-    elif kind == "N":
-        paint_strip("y", -1)
-    elif kind == "S":
-        paint_strip("y", +1)
-    elif kind == "NE":
-        for i in range(10):
-            put(px, 15 - i // 2, i, (*SAND, 230))
-            put(px, 15, i, (*SAND_D, 230))
-            if i < 6:
-                put(px, 15 - i // 2 - 1, i, (*GRASS_LIP, 200))
-        put(px, 14, 2, (*FOAM, 180))
-    elif kind == "NW":
-        for i in range(10):
-            put(px, i // 2, i, (*SAND, 230))
-            put(px, 0, i, (*SAND_D, 230))
-            if i < 6:
-                put(px, i // 2 + 1, i, (*GRASS_LIP, 200))
-        put(px, 1, 2, (*FOAM, 180))
-    elif kind == "SE":
-        for i in range(10):
-            put(px, 15 - i // 2, 15 - i, (*SAND, 230))
-            put(px, 15, 15 - i, (*SAND_D, 230))
-            if i < 6:
-                put(px, 15 - i // 2 - 1, 15 - i, (*GRASS_LIP, 200))
-        put(px, 14, 13, (*FOAM, 180))
-    elif kind == "SW":
-        for i in range(10):
-            put(px, i // 2, 15 - i, (*SAND, 230))
-            put(px, 0, 15 - i, (*SAND_D, 230))
-            if i < 6:
-                put(px, i // 2 + 1, 15 - i, (*GRASS_LIP, 200))
-        put(px, 1, 13, (*FOAM, 180))
-    return im
+    src = load_gen("creek_water_sheet_gen.png")
+    cells = slice_grid(src, 4, 2, pad=0.02)
+    if len(cells) < 8:
+        raise SystemExit(f"creek water expected 8 cells, got {len(cells)}")
+    for i, cell in enumerate(cells[:4]):
+        save(f"tile_water{i}.png", cell_tile(cell, 16))
+    for i, cell in enumerate(cells[4:8]):
+        save(f"tile_shallow{i}.png", cell_tile(cell, 16))
 
 
 def build_shores() -> None:
-    for k in ("E", "W", "N", "S", "NE", "NW", "SE", "SW"):
-        save(f"shore_{k}.png", shore_edge(k))
+    src = load_gen("creek_shore_sheet_gen.png")
+    cells = slice_grid(src, 4, 2, pad=0.02)
+    if len(cells) < 8:
+        raise SystemExit(f"shore sheet expected 8 cells, got {len(cells)}")
+    # Prompt order: E W N S / NE NW SE SW
+    # Gen may swap N/S — remap by detecting water mass location after kill.
+    mapped = list(cells[:8])
+    for k, cell in zip(SHORE_KEYS, mapped):
+        save(f"shore_{k}.png", to_shore_overlay(cell))
 
 
 def improve_reed() -> None:
-    """Slightly richer reed clump for creek edge."""
-    im = blank()
-    # taller than 16? prop_reed may be taller - check
-    im = Image.new("RGBA", (12, 20), (0, 0, 0, 0))
-    px = im.load()
-    stem = (48, 110, 36, 255)
-    tip = (90, 160, 50, 255)
-    for x, h in ((2, 16), (5, 19), (8, 15), (10, 17)):
-        for y in range(20 - h, 20):
-            px[x, y] = stem
-            if y < 20 - h + 3:
-                px[x, y] = tip
-            if y == 20 - h:
-                px[min(11, x + 1), y] = tip
-    save("prop_reed.png", im)
+    """Reed clump: prefer extracting from fish weed spot gen if available."""
+    weed = OUT.parent.parent.parent / "ritual" / "fish" / "spot_weed.png"
+    # path: assets/ritual/fish/spot_weed.png
+    weed = Path(__file__).resolve().parents[1] / "game" / "assets" / "ritual" / "fish" / "spot_weed.png"
+    if weed.is_file():
+        src = Image.open(weed).convert("RGBA")
+        # crop green reed-ish upper region
+        a = np.array(src)
+        g = a[:, :, 1].astype(int)
+        r = a[:, :, 0].astype(int)
+        b = a[:, :, 2].astype(int)
+        green = (g > r + 10) & (g > b) & (g > 60) & (a[:, :, 3] > 20)
+        a[~green, 3] = 0
+        reed = Image.fromarray(a)
+        save("prop_reed.png", hard_fit(reed, 12, 20, 12))
+    else:
+        print("  skip prop_reed (no spot_weed yet)")
 
 
 def main() -> int:
-    print("build creek tiles")
+    print("build creek tiles from gen")
     build_water()
-    build_shallow()
     build_shores()
     improve_reed()
     return 0

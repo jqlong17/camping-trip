@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build drip-brew pixel icons from gen sheets + procedural grind/temp markers."""
+"""Build drip-brew pixel icons from gen sheets + procedural pours/paper markers."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -126,49 +126,105 @@ def build_beans() -> None:
         save(f"ritual/bean_{bid}.png", icon)
 
 
+def kill_chroma_green(im: Image.Image) -> Image.Image:
+    """Remove pure chroma-key green only — do not touch brown coffee grounds."""
+    a = np.array(im.convert("RGBA"))
+    r = a[:, :, 0].astype(int)
+    g = a[:, :, 1].astype(int)
+    b = a[:, :, 2].astype(int)
+    chroma = (g > 140) & (g > r + 40) & (g > b + 40) & (r < 120) & (b < 120)
+    pure = (g > 180) & (r < 80) & (b < 80)
+    a[chroma | pure, 3] = 0
+    return Image.fromarray(a)
+
+
+def icon_fit_alpha(im: Image.Image, tw: int = 48, th: int = 48, colors: int = 32) -> Image.Image:
+    """Contain-fit after alpha crop — no cream/kill_bg that eats ground highlights."""
+    arr = np.array(im.convert("RGBA"))
+    ys, xs = np.where(arr[:, :, 3] > 20)
+    if len(xs) == 0:
+        return Image.new("RGBA", (tw, th), (0, 0, 0, 0))
+    crop = Image.fromarray(arr).crop((xs.min(), ys.min(), xs.max() + 1, ys.max() + 1))
+    pad = max(2, min(crop.width, crop.height) // 16)
+    padded = Image.new("RGBA", (crop.width + pad * 2, crop.height + pad * 2), (0, 0, 0, 0))
+    padded.alpha_composite(crop, (pad, pad))
+    scale = min((tw - 2) / padded.width, (th - 2) / padded.height)
+    nw = max(1, int(round(padded.width * scale)))
+    nh = max(1, int(round(padded.height * scale)))
+    mid = padded.resize((max(nw * 2, 4), max(nh * 2, 4)), Image.Resampling.BILINEAR)
+    scaled = quantize_rgba(mid.resize((nw, nh), Image.Resampling.NEAREST), colors)
+    canvas = Image.new("RGBA", (tw, th), (0, 0, 0, 0))
+    canvas.alpha_composite(scaled, ((tw - nw) // 2, (th - nh) // 2))
+    return canvas
+
+
 def draw_grind_icons() -> None:
-    # fine / medium / coarse — coffee particle density
-    for name, dens, size in (("fine", 18, 1), ("medium", 10, 2), ("coarse", 6, 3)):
-        im = Image.new("RGBA", (48, 48), (0, 0, 0, 0))
-        px = im.load()
-        # mill body
-        for y in range(8, 40):
-            for x in range(14, 34):
-                px[x, y] = (90, 70, 48, 255) if (x in (14, 33) or y in (8, 39)) else (150, 118, 78, 255)
-        # crank
-        for x in range(34, 42):
-            px[x, 18] = (70, 70, 70, 255)
-        px[41, 16] = (70, 70, 70, 255)
-        px[41, 17] = (70, 70, 70, 255)
-        # grounds
-        step = max(2, 8 - dens // 3)
-        for y in range(28, 44, size + 1):
-            for x in range(8, 40, step):
-                if (x + y) % 3 != dens % 3:
-                    continue
-                for dy in range(size):
-                    for dx in range(size):
-                        if 0 <= x + dx < 48 and 0 <= y + dy < 48:
-                            px[x + dx, y + dy] = (72, 48, 28, 255)
-        save(f"ritual/grind_{name}.png", im)
+    """Fine / medium / coarse — per-item gen on chroma green (no sheet cream kill)."""
+    assets_dir = Path("/Users/ruska/.cursor/projects/Users-ruska-projects-3ds/assets")
+    PROMO.mkdir(parents=True, exist_ok=True)
+    for name in ("fine", "medium", "coarse"):
+        gen = assets_dir / f"drip_grind_{name}_gen.png"
+        if not gen.is_file():
+            raise FileNotFoundError(f"missing grind gen: {gen}")
+        raw = Image.open(gen).convert("RGBA")
+        raw.save(PROMO / f"drip_grind_{name}_gen_ref.png")
+        keyed = kill_chroma_green(raw)
+        # drop leftover cream card if gen put subject on a paper square
+        a = np.array(keyed)
+        cream = (a[:, :, 0] > 230) & (a[:, :, 1] > 220) & (a[:, :, 2] > 200) & (
+            a[:, :, 0].astype(int) - a[:, :, 2].astype(int) < 45
+        )
+        a[cream, 3] = 0
+        icon = icon_fit_alpha(Image.fromarray(a), 48, 48, 32)
+        opaque = (np.array(icon)[:, :, 3] > 20).sum()
+        if opaque < 200:
+            raise SystemExit(f"grind_{name} too sparse opaque={opaque} after chroma")
+        save(f"ritual/grind_{name}.png", icon)
+
+
+def brew_fit(
+    im: Image.Image, tw: int = 160, th: int = 120, colors: int = 40, y_bias: float = -0.12
+) -> Image.Image:
+    """Cover-crop into 4:3. Negative y_bias keeps more sky so action sits lower."""
+    rgba = kill_cream_bg(im.convert("RGBA"), thr=232)
+    scale = max(tw / rgba.width, th / rgba.height)
+    nw = max(tw, int(round(rgba.width * scale)))
+    nh = max(th, int(round(rgba.height * scale)))
+    mid = rgba.resize((max(4, nw // 2), max(4, nh // 2)), Image.Resampling.BILINEAR)
+    scaled = mid.resize((nw, nh), Image.Resampling.NEAREST)
+    x0 = max(0, (nw - tw) // 2)
+    y0 = max(0, min(nh - th, (nh - th) // 2 + int(th * y_bias)))
+    return quantize_rgba(scaled.crop((x0, y0, x0 + tw, y0 + th)), colors)
+
+
+def build_brew_steps() -> None:
+    """Rebuild drip_1..3 as filled 160×120 (old 128² kept art in the top 76px)."""
+    PROMO.mkdir(parents=True, exist_ok=True)
+    for i in (1, 2, 3):
+        src = PROMO / f"drip_pixel_{i}.png"
+        if not src.is_file():
+            raise FileNotFoundError(f"missing brew frame promo: {src}")
+        save(f"ritual/drip_{i}.png", brew_fit(Image.open(src)))
 
 
 def draw_temp_icons() -> None:
-    for name, fill, steam in (("92", (120, 170, 210), True), ("100", (220, 90, 70), True)):
-        im = Image.new("RGBA", (48, 48), (0, 0, 0, 0))
-        px = im.load()
-        # kettle
-        for y in range(16, 40):
-            for x in range(10, 36):
-                if (x - 23) ** 2 / 140 + (y - 28) ** 2 / 90 <= 1:
-                    px[x, y] = (200, 200, 205, 255) if y < 22 else (*fill, 255)
-        for x in range(30, 42):
-            px[x, 22] = (160, 160, 165, 255)
-        if steam:
-            for y, x in ((8, 20), (6, 24), (9, 28)):
-                px[x, y] = (220, 230, 240, 255)
-                px[x, y + 1] = (200, 210, 220, 180)
-        save(f"ritual/temp_{name}.png", im)
+    """92 / 100 kettle icons from text-to-image (no ImageDraw bodies).
+
+    Old PIL blue kettle vanished on the selected yellow choice slot; gen
+    icons keep high-contrast metal + cool/hot cue on cream then kill_cream.
+    """
+    assets_dir = Path("/Users/ruska/.cursor/projects/Users-ruska-projects-3ds/assets")
+    PROMO.mkdir(parents=True, exist_ok=True)
+    for name in ("92", "100"):
+        gen = assets_dir / f"drip_temp_{name}_gen.png"
+        if not gen.is_file():
+            raise FileNotFoundError(f"missing temp gen: {gen}")
+        raw = Image.open(gen).convert("RGBA")
+        raw.save(PROMO / f"drip_temp_{name}_gen_ref.png")
+        icon = hard_fit(kill_cream_bg(raw), 48, 48, 26)
+        # reinforce alpha if cream bleed survived hard_fit upsample
+        icon = kill_cream_bg(icon, thr=232)
+        save(f"ritual/temp_{name}.png", icon)
 
 
 def draw_pours_icons() -> None:
@@ -216,6 +272,8 @@ def main() -> int:
     build_drippers()
     print("beans")
     build_beans()
+    print("brew steps")
+    build_brew_steps()
     print("grind/temp/pours/paper")
     draw_grind_icons()
     draw_temp_icons()

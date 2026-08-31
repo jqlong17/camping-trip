@@ -53,6 +53,7 @@ function State.resetTripHaul(emptyFish)
     fruit = 0,
     coffee = 0,
     tea = 0,
+    meals = 0,
     fish = emptyFish and emptyFish() or { ayu = 0, trout = 0, carp = 0 },
   }
 end

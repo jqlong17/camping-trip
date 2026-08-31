@@ -1,0 +1,214 @@
+--[[ 露营之旅 — 资源加载与懒加载（DEV-068e P4 · docs/代码架构-SPEC.md） ]]
+
+local Assets = {}
+
+local host
+local store = {}
+local assetRoot = ""
+local loadFailCount = 0
+local failedImages = {}
+local fitQuads = {}
+
+function Assets.bindHost(h)
+  host = h
+end
+
+function Assets.get()
+  return store
+end
+
+function Assets.failCount()
+  return loadFailCount
+end
+
+function Assets.root()
+  return assetRoot
+end
+
+function Assets.detectRoot()
+  assetRoot = ""
+  if host and host.isConsole and love.filesystem.mountFullPath then
+    local ok, mounted = pcall(
+      love.filesystem.mountFullPath,
+      "sdmc:/",
+      "sdmc",
+      "read",
+      true
+    )
+    if host.appendLoadLog then
+      host.appendLoadLog("mountFullPath ok=" .. tostring(ok) .. " mounted=" .. tostring(mounted))
+    end
+    if ok and mounted then
+      assetRoot = "sdmc/3ds/CampingTrip/game/"
+      return
+    end
+  end
+  if love.filesystem.getInfo and love.filesystem.getInfo("assets/ui/title_top.png") then
+    return
+  end
+  if love.filesystem.getInfo and love.filesystem.getInfo("game/assets/ui/title_top.png") then
+    assetRoot = "game/"
+  end
+end
+
+function Assets.path(rel)
+  return assetRoot .. rel
+end
+
+local function tryNewImage(path)
+  local ok, img = pcall(love.graphics.newImage, path)
+  if ok and img then return img, nil end
+  return nil, img
+end
+
+function Assets.load(path)
+  if failedImages[path] then return nil end
+  local resolved = Assets.path(path)
+  local img, err = tryNewImage(resolved)
+  if img then
+    pcall(function() img:setFilter("nearest", "nearest") end)
+    return img
+  end
+  failedImages[path] = true
+  loadFailCount = loadFailCount + 1
+  if host and host.appendLoadLog then
+    host.appendLoadLog("fail " .. resolved .. " " .. tostring(err))
+  end
+  return nil
+end
+
+function Assets.writeProbe()
+  if not host or not host.isConsole then return end
+  local log = host.appendLoadLog
+  if not log then return end
+  log("os=" .. tostring(love.system.getOS()))
+  if love.filesystem.getIdentity then
+    log("identity=" .. tostring(love.filesystem.getIdentity()))
+  end
+  if love.filesystem.getSaveDirectory then
+    log("save=" .. tostring(love.filesystem.getSaveDirectory()))
+  end
+  if love.filesystem.getSource then
+    log("source=" .. tostring(love.filesystem.getSource()))
+  end
+  log("assetRoot=" .. assetRoot)
+  for _, p in ipairs({
+    Assets.path("assets/ui/title_top.png"),
+    "assets/ui/title_top.png",
+    "game/assets/ui/title_top.png",
+    "assets/tile_grass0.png",
+    "assets/story/p1.png"
+  }) do
+    local info = love.filesystem.getInfo and love.filesystem.getInfo(p)
+    log("info " .. p .. " " .. (info and tostring(info.size or "ok") or "nil"))
+  end
+end
+
+function Assets.drawFitted(img, x, y, srcW, srcH, sx, sy)
+  if not img then return end
+  sx, sy = sx or 1, sy or 1
+  local iw, ih = img:getWidth(), img:getHeight()
+  if srcW and srcH and (iw > srcW or ih > srcH) then
+    local q = fitQuads[img]
+    if not q then
+      local ok, made = pcall(love.graphics.newQuad, 0, 0, srcW, srcH, iw, ih)
+      if ok then
+        q = made
+        fitQuads[img] = q
+      end
+    end
+    if q then
+      love.graphics.draw(img, q, x, y, 0, sx, sy)
+      return
+    end
+  end
+  love.graphics.draw(img, x, y, 0, sx, sy)
+end
+
+function Assets.ensureStory(key)
+  local AP = host and host.AP
+  store.story = store.story or {}
+  if not store.story[key] and AP then
+    store.story[key] = Assets.load(AP.story(key))
+  end
+  return store.story[key]
+end
+
+function Assets.ensureCast(i)
+  store.cast = store.cast or {}
+  if not store.cast[i] then
+    store.cast[i] = Assets.load("assets/cast/c" .. i .. ".png")
+  end
+  return store.cast[i]
+end
+
+function Assets.ensureWalk(i)
+  store.walk = store.walk or {}
+  if store.walk[i] then return store.walk[i] end
+  local sheet = Assets.load("assets/cast/c" .. i .. "_walk.png")
+  if not sheet then return nil end
+  local quads = {}
+  for row = 0, 3 do
+    quads[row] = {}
+    for col = 0, 2 do
+      local ok, q = pcall(love.graphics.newQuad, col * 40, row * 40, 40, 40, sheet:getDimensions())
+      if not ok then return nil end
+      quads[row][col] = q
+    end
+  end
+  store.walk[i] = { sheet = sheet, quads = quads }
+  return store.walk[i]
+end
+
+function Assets.ensureRitual()
+  if store.ritual and store.ritual.ready then return store.ritual end
+  store.ritual = {
+    ready = true,
+    drip = {},
+    fishAnim = {},
+    fanAnim = {}
+  }
+  local AP = host and host.AP
+  DripBrew.loadChoiceAssets(store.ritual, Assets.load)
+  TeaBrew.loadChoiceAssets(store.ritual, Assets.load)
+  FishRod.loadChoiceAssets(store.ritual, Assets.load)
+  if AP then
+    for i = 1, 4 do
+      store.ritual.fanAnim[i] = Assets.load(AP.forestWorld("fan_anim_" .. (i - 1) .. ".png"))
+    end
+  end
+  return store.ritual
+end
+
+function Assets.newFont(size)
+  if host and host.isConsole then
+    local ok, font = pcall(love.graphics.newFont, "chinese", size)
+    if ok and font then return font end
+    ok, font = pcall(love.graphics.newFont, size)
+    return ok and font or nil
+  end
+  for _, path in ipairs({
+    "fonts/zh-ui.ttf",
+    "/System/Library/Fonts/Hiragino Sans GB.ttc",
+    "/System/Library/Fonts/STHeiti Light.ttc"
+  }) do
+    local ok, font = pcall(love.graphics.newFont, path, size)
+    if ok and font then return font end
+  end
+  return love.graphics.newFont(size)
+end
+
+function Assets.loadBoot()
+  local AP = host and host.AP
+  if not AP then return end
+  store.titleTop = Assets.load(AP.ui("title_top.png"))
+  store.titleBot = Assets.load(AP.ui("title_bot.png"))
+  store.packBg = Assets.load(AP.ui("ui_pack_bg.png"))
+  store.story, store.cast, store.walk = {}, {}, {}
+  store.ritual = { ready = false, drip = {}, fishAnim = {}, fanAnim = {} }
+  if host and host.appendLoadLog then
+    host.appendLoadLog("loadAssets title done fails=" .. loadFailCount)
+  end
+end
+
+return Assets

@@ -13,7 +13,7 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 ASSETS = ROOT / "game" / "assets"
-SKIP_DIR = {"_tiles_v1", "_drip_v1"}
+SKIP_DIR = {"_tiles_v1", "_drip_v1", "_creek_v1"}
 
 
 def skip(path: Path) -> bool:

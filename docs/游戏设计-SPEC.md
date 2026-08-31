@@ -47,30 +47,35 @@
 
 ## 3. 叙事与循环结构
 
-### 3.0 整局流程图（已拍板 · 2026-08-30）
+### 3.0 整局流程图（已拍板 · 2026-08-30 · DEV-050 修订）
 
-玩家可见完整一局 = **标题 → 序章分镜对话 → 选角色 → 出发过渡 → 营地玩法 → 回家过渡 → 标题**。
+玩家可见完整一局（**首次**）=
+**标题 → 序章 → 选角色 → 出发 → 营地 → 回家 → 书桌日记（存档）→ 标题**。
+
+第二次及以后：**跳过选角色**（可用「切换角色」改）；回家后仍写日记并累计存档。
 
 ```mermaid
 flowchart TD
   Title[标题画面] -->|开始旅程| Prologue[序章分镜加自言自语按A]
-  Prologue --> Cast[选角色上屏展示下屏点选]
-  Cast -->|确认| Depart[出发过渡文生图]
+  Prologue -->|首次| Cast[选角色]
+  Prologue -->|已有角色| Depart
+  Cast -->|确认| Depart[出发过渡]
   Depart --> Camp[抵达营地像素玩法]
   Camp --> DayCycle[白天到夜里点灯]
-  DayCycle --> Pack[次日收拾]
-  Pack --> Home[回家过渡图加短台词]
-  Home --> Title
+  DayCycle --> Home[回家过渡]
+  Home --> Diary[书桌日记=存档]
+  Diary --> Title
 ```
 
 | 序号 | 场景 ID | 内容 | 上屏 | 下屏 |
 |------|---------|------|------|------|
-| 1 | `title` | 标题菜单 | 标题风景 + 游戏名 | 开始 / 继续 / 图鉴 / 关于 |
+| 1 | `title` | 标题菜单 | 标题风景 + 游戏名 | 开始 / 继续 / 切换角色 / 图鉴 / 关于 |
 | 2 | `prologue` | **故事序章** | 文生图分镜（一张一张） | 「A 继续」或台词框；按 A / 触摸下一句 |
-| 3 | `cast` | **选角色** | 当前角色大立绘/像素放大 + 短介绍 | 角色列表点选；确认键 |
+| 3 | `cast` | **选角色（仅首次，或从切换角色进入）** | 当前角色大立绘/像素放大 + 短介绍 | 角色列表点选；确认键 |
 | 4 | `depart` | **出发过渡** | 文生图 2 张左右（出门→林道） | 可自动或按 A |
-| 5 | `play` | 营地本体 | 俯视像素林间 | 背包 / 互动 |
-| 6 | `homecoming` | **回家过渡** | 文生图 1～2 张 + 短结算句 | 按 A 回标题 |
+| 5 | `play` | 营地本体 | 俯视像素林间 | 背包 / 互动 / 本趟收获条 |
+| 6 | `homecoming` | **回家过渡** | 文生图 1～2 张 + 短结算句 | 按 A 进入日记 |
+| 7 | `diary` | **书桌日记（存档）** | 日记本/书桌分镜 | 本趟收获 + 累计；A 保存并回标题 |
 
 ### 3.0.1 序章对话稿（初稿，可改）
 
@@ -86,8 +91,31 @@ flowchart TD
 ### 3.0.2 选角色
 
 - 使用 `docs/characters/summer_v2_*` 角色池（约 9 人）。  
-- **先序章、后选人**（已拍板）：故事立住「周末要出发」的情绪，再选「这次谁去」。  
-- 下屏点选，上屏预览；确认后进入出发过渡。
+- **首次**：序章后进入选人；确认后写入存档 `castId` / `castChosen=true`。  
+- **之后出发**：序章结束后**直接出发**，不再每次选人。  
+- **切换角色**：标题菜单独立入口；改完只更新存档角色，不强制立刻进营地。  
+- 下屏点选，上屏预览；首次确认后进入出发过渡。
+
+### 3.0.4 营地收获（DEV-050）
+
+| 行为 | 触发 | 限制 | 下屏 |
+|------|------|------|------|
+| **摘果** | 靠近挂果树按 A（优先于普通装备使用） | 每棵有果树本趟有限（约 1～2 个）；采完提示「这棵没了」 | 收获条显示果子图标与数量 |
+| **钓鱼** | 溪边选钓竿 + A | 4 帧仪式；有概率空竿，成功则随机鱼种入账 | 收获条显示鱼种与条数 |
+| **手冲/喝咖啡** | 已有 | 配方手冲 + 一壶 3 口；喝空可再冲 | 计入本趟 `coffee` |
+
+**鱼种（初版）**：`ayu` 香鱼 · `trout` 溪鳟 · `carp` 鲤鱼。  
+本趟收获存在 `tripHaul`；回家日记写入累计 `totals`。
+
+钓鱼仪式图须与手冲同级：**120×76 硬像素特写**（上屏 ×2 nearest），禁止继续放大糊掉的 56×48 小图。
+
+### 3.0.5 书桌日记 = 存档（DEV-050）
+
+- 回家分镜结束后进入 `diary`，不要直接回标题。  
+- 上屏：日记本/书桌分镜 `story/diary.png`（文生图 → 硬像素管线）。  
+- 下屏：本趟摘要（果子 / 各鱼种 / 咖啡）+ 累计（露营次数、总果子、总鱼、总咖啡）。  
+- 按 A：写入 `save.json`，回标题；「继续」在有存档时可用（再来一个周末，沿用角色）。  
+- 存档字段最少包含：`castId`、`castChosen`、`trips`、`totals`、`lastTrip`、`history`（最近若干趟）。
 
 ### 3.0.3 文生图分镜规范
 
@@ -190,7 +218,7 @@ flowchart LR
 
 - 手冲壶 / V60 / 分享壶 / 杯子分层绘制。  
 - 不同豆子 → 粉层色、汤色、品鉴短句不同。  
-- 手冲流程可做成 2～4 步小交互（闷蒸 → 绕圈注水 → 分享），不做成模拟器地狱。
+- 手冲已落地为多参数配方 + 三步冲煮；工程见 [手冲模块-SPEC.md](./手冲模块-SPEC.md)（`game/drip_brew.lua`）。扩展豆子/滤杯改 catalog + PNG，勿再堆 `main.lua` 分支。
 
 ### 6.3 帐篷
 
@@ -384,6 +412,26 @@ SFX **不必用 Suno**（不擅长短反馈音）。放入 `game/audio/`，P2 �
 | **DEV-048** | 2026-08-30 | done | **真机 PNG 全部 missing**：日志证实 source 是 `sdmc:/3ds/CampingTrip/game`，但虚拟路径 `assets/*` 不可见；改用 `mountFullPath("sdmc:/", "sdmc", "read", true)` 后从真实 SD 路径加载。失败图片负缓存，避免图鉴每帧重复 IO 卡顿 |
 | **DEV-049** | 2026-08-30 | done | **3DS 原生纹理管线**：日志明确 `newImage("*.png")` 真机会找同名 `.t3x`。本地构建 tex3ds 2.3.0；`build-3ds-textures.py` 转换 133 张运行时 PNG；deploy 自动转换；预检强制要求 T3X |
 | **DEV-050** | 2026-08-31 | done | **真机营地性能第二轮**：日志确认单 BGM / 无环境音 / 静态动效仍约 5 FPS；新增 `camp_static_base.png/.t3x` 离线预合成地面/水岸/小装饰，运行时只画少量前景并恢复轻量树/灌木风感；手冲完成后自动选中杯子，杯子/手冲均可继续喝咖啡；playtest 记录 `coffeeCups` |
+| **DEV-051** | 2026-08-31 | done | **出发页营地预热**：用户反馈 `到了。先安顿下来吧。` 按 A 后等待过长；将 `ensureCamp()` 拆成 20 步 `camp_preload`，在 `goDepart()` 后按帧预加载营地资源和离线底图，按 A 时若未完成则提示「营地还在整理」并完成后自动进 play |
+| **DEV-052** | 2026-08-31 | done | **真机玩法节奏修正**：咖啡一壶最多三口；夜里靠近篝火按 A 点火；时间自动推进，R 快进到下一天；右上角显示 `D? 时段`；3DS 静态底图模式恢复轻量鱼跃、小鸟、蝴蝶/蜻蜓/萤火虫 |
+| **DEV-053** | 2026-08-31 | done | **收获+日记存档**：挂果树有限摘果；钓鱼仪式 120×76 硬像素并计入鱼种；下屏收获条；回家后书桌日记分镜=`save.json`；角色仅首次选择，标题可切换；累计露营次数/果/鱼/咖啡 |
+| **DEV-054** | 2026-08-31 | done | **营地生活感**：角色男女外形强化+选人标注；溪水波光动画（静态底图上也叠画）；靠近溪水/小鸟调节环境音；三种杯子可选；树种扩到 12；涉水脚边溅水；帐篷可在平地自选落点 |
+| **DEV-055** | 2026-08-31 | done | **真机营地第三轮减 draw**：树/灌木/石/巢烤进 `camp_static_base`；静态路径不再每帧重绘 75 格水面与前景树；波光改廉价 sparkle；底图限色 48 过像素审计；静态预加载跳过树/水帧纹理 |
+| **DEV-056** | 2026-08-31 | done | **出发/回家分镜跟角色**：擦掉 d1/d2/h1 写死男孩；运行时按 `player.castId` 叠 20×20 立绘；playtest 改选女孩并断言 castId |
+| **DEV-057** | 2026-08-31 | done | **恢复角色美术**：从 `docs/characters/walk_v5` 还原九人立绘+走表（覆盖 DEV-054 程序色块）；`build-camp-life-assets` 不再重画角色；脚本 `restore-cast-walk-v5.py` |
+| **DEV-058** | 2026-08-31 | done | **日记有字 + 钓鱼仪式加细**：上屏日记页按本趟收获写短句；钓鱼 120×76 重绘（夜空/码头/溅水/弯竿/鱼形）；`build-harvest-assets.py` |
+| **DEV-059** | 2026-08-31 | done | **下屏背包 UI 文生图重做**：新 `ui_pack_bg` 藤蔓边框；六件 `gear_*` 图标更清晰；脚本 `build-pack-ui-from-gen.py`；参考 `docs/promo/*_gen_ref.png` |
+| **DEV-060** | 2026-08-31 | done | **日记背景跟选角**：擦掉 diary 写死头像；按 castId 叠立绘，scissor 只露头肩；出发/回家槽位支持 scale |
+| **DEV-061** | 2026-08-31 | done | **河岸溪流美术**：重绘水/浅滩/岸线 16×16（泥沙唇、碎石、波光动画帧）；加宽断续外浅滩；重建 `camp_static_base`；脚本 `build-creek-tiles.py` |
+| **DEV-062** | 2026-08-31 | done | **草地/泥地砖美术**：硬像素重绘 8 草地 + 4 泥地（斑块/草叶/小花/边缘融合）；告别照片缩小糊图；重建 `camp_static_base`；脚本 `build-ground-tiles.py` |
+| **DEV-063** | 2026-08-31 | done | **草地/泥地 v2**：安静斑块+竖草簇（去十字重复）；泥地降噪；`dirt_fringe_NESW` 软化泥地直角；静态底图同步烘焙；时钟 HUD 已为 `D? HH:MM` |
+| **DEV-064** | 2026-08-31 | done | **手冲加深可反复冲**：选豆(5)/研磨(3)/滤杯(5)/滤纸/水温92·100/冲次2~4 → 三步冲煮；参数算口感；一壶三口喝空可再冲；文生图像素滤杯与豆袋；扩 `zh-ui` 字形；脚本 `build-drip-brew-assets.py` |
+| **DEV-065** | 2026-08-31 | done | **手冲工程化**：`docs/手冲模块-SPEC.md`；逻辑/绘制迁入 `game/drip_brew.lua`；`PHASES` 数据驱动；`main` bind 宿主回调 |
+| **DEV-066** | 2026-08-31 | done | **泡茶仪式**：`docs/泡茶模块-SPEC.md` + `tea_brew.lua`；选茶/投量/茶器/温杯/水温/出汤/三步；与咖啡壶状态并存；文生图 leaf/ware/tea_1..3；背包「泡茶」替换小锅格 |
+| **DEV-067** | 2026-08-31 | done | **仪式资源分目录 + 钓鱼加深**：`ritual/drip/`、`ritual/tea/`、`ritual/fish/`；`fish_rod.lua` 六相位 |
+| **DEV-068** | 2026-08-31 | done | **9 种日式杯子 + 场景资源分目录**：`assets/cups/`；`scenes/forest/`（story/camp/world）、`home/story`、`shared/`、`gear/`、`ui/`；`asset_paths.lua` |
+| **DEV-068** | 2026-08-31 | wip | **代码模块化**：见 [代码架构-SPEC.md](./代码架构-SPEC.md)；P0–P3 完成，main locals 198→**151** |
+| **DEV-069** | 2026-08-31 | wip | **真机音频扩展**：`console_prox_amb_bgm_switch`、title/night BGM、近水溪水、近鸟 sfx；见 [真机音频扩展-SPEC.md](./真机音频扩展-SPEC.md) |
 | **DEV-012** | — | planned | **P1** 加深：更多时段事件（搭帐篷动画、手冲小游戏） |
 | **DEV-014** | — | planned | **P3** 精修回家：次日收拾动画、周末计数 |
 | **DEV-015** | 2026-08-30 | done | 基础 SFX 清单齐：UI + 脚步/帐篷/手冲/杯子/扇子/点灯 |
@@ -432,6 +480,95 @@ perf scene=play frames=... slow=... maxDtMs=... mode=static_play_fx/console_sing
 - 当前行为：完成三步手冲后自动选中“杯子”；杯子可继续喝；如果已经冲好，再按“手冲”也会转为喝咖啡。
 - 下屏会提示「咖啡已冲好 · 选杯子按 A 喝」或「A 喝咖啡 · 已喝 N 口」。
 - playtest 已增加 `coffeeCups` 断言信号，当前日志为 `dripped=true coffeeCups=2`。
+
+### 12.1.2 进入营地等待优化（DEV-051）
+
+**证据来源：用户真机体感 + 桌面 `load_report.txt`。** 用户在第二张出发分镜
+`到了。先安顿下来吧。` 按 A 后，需要等待很久才进入营地。此前 `goPlay()` 会同步执行
+`ensureCamp()`，包括营地贴图、阴影、装备 icon、玩家、静态底图和 canvas 构建；在 3DS 上
+这些 SD/T3X 读取和纹理创建会集中阻塞在按 A 的那一刻。
+
+当前修正：
+
+- build 标记：`2026-08-31-depart-camp-preload`。
+- `ensureCamp()` 保留为强制完成入口，但内部改用 `campPreload` 步进器。
+- `goDepart()` 会立即 `beginCampPreload("depart")`，用户阅读出发分镜时后台每帧加载一小步。
+- `love.update()` 在 `scene == "depart"` 时继续执行 `runCampPreloadSlice()`；桌面每帧 3 步，真机每帧 1 步，避免单帧尖峰太大。
+- 若用户很快在最后一句按 A，而 `campReady` 尚未完成，会显示「营地还在整理 · 马上就好」；加载完成后自动 `goPlay()`，不再黑屏式同步等待。
+- 本地 `load_report.txt` 应看到 `camp_preload_begin reason=depart ...` 早于 `scene=play`，并看到 `ensureCamp done ... steps=20`。
+
+下一轮真机测试重点：
+
+```text
+boot build=2026-08-31-depart-camp-preload
+camp_preload_begin reason=depart mode=static_play_fx
+ensureCamp done fails=0 durationMs=... mode=static_play_fx staticBase=true steps=20
+perf scene=play frames=... slow=... maxDtMs=... mode=static_play_fx/console_single_stream_no_stop
+```
+
+判断口径：
+
+- 如果按 A 体感等待明显缩短，说明卡点主要是首次营地资源加载尖峰，下一步继续压缩总加载量或提前到更早分镜。
+- 如果按 A 后仍长时间停顿，说明单步里的某个 T3X/MP3/字体 IO 仍太重，下一步把 `camp_preload` 加每步耗时日志，定位具体 step。
+- 如果进入后仍低帧，继续沿 DEV-050 的持续渲染优化路线处理，不要把进入等待和营地帧率混为一个问题。
+
+### 12.1.3 真机玩法节奏修正（DEV-052）
+
+**证据来源：用户真机反馈 + 桌面 playtest。** 用户确认 DEV-051 后整体不卡顿，但出现三类体验问题：咖啡可无限喝、夜里不知道如何点篝火、时间不应依赖 X 手动推进，同时希望 3DS 真机恢复鱼鸟虫。
+
+当前修正：
+
+- build 标记：`2026-08-31-auto-time-critters`。
+- 咖啡改为一壶最多三口：手冲完成自动喝第一口，杯子/手冲入口最多再喝到第三口；超过后提示「这壶刚好喝完了」。
+- 夜里靠近篝火按 A 会优先点火，不再要求先选中某个装备；左上角状态从「灯」改为「火」。
+- 时间在 play 场景、非仪式状态下每 42 秒自动推进一档；X 不再作为时间推进键。
+- R / right shoulder 快进到下一天上午，并重置咖啡、篝火、虫鸟状态。
+- 右上角新增 `D1 上午` 这类时间牌，和左上角营地状态分开。
+- `critterFx` 独立于静态底图：真机即使 `static_play_fx` 也加载并更新低数量鱼跃、小鸟、蝴蝶/蜻蜓/萤火虫；桌面可用 `LINJIAN_PLAY_FX=static LINJIAN_CRITTER_FX=1 love game --playtest` 模拟。
+
+验收日志：
+
+```text
+dripped=true coffeeCups=3 cap=true
+lantern=true
+fastDay day=2 time=D2 上午
+```
+
+下一轮真机判断：如果恢复鱼鸟虫后仍不卡顿，就可以继续保留；如果音乐或帧率再次抖动，先关 `critterFx` 或减少 spawn 数量，不要回退自动时间和咖啡规则。
+
+### 12.1.4 真机营地减 draw（DEV-055）
+
+**证据来源：DEV-050 真机约 4–5 FPS + 桌面 static playtest。** 静态底图有了之后，每帧仍在做两件重活：重绘约 75 格水面动画、再逐棵画 ~28 棵树（含阴影/风摆）。
+
+本轮改动：
+
+- build 标记：`2026-08-31-static-props-bake`。
+- `scripts/build-camp-static-base.py` 把树/灌木/石/巢也烤进 `camp_static_base.png`，并 median-cut **48 色**（审计 unique=48，此前 432 FAIL）。
+- 静态路径：`drawCampGroundLayer` 只画一张底图；`propRows` 只留帐篷；水果用 `drawFruitOverlays` 小色块；溪水用 `drawCreekLite` 波光点，不再换水帧贴图。
+- 静态预加载跳过树/灌木/石/花/水帧/岸线纹理，缩短进营地 IO。
+- 桌面默认仍是 `full_play_fx`（完整动效）；真机或 `LINJIAN_PLAY_FX=static` 走上述路径。
+
+桌面验收：
+
+```text
+boot build=2026-08-31-static-props-bake
+ensureCamp done fails=0 ... mode=static_play_fx staticBase=true
+playtest PASS（full + LINJIAN_PLAY_FX=static）
+audit-pixel-style.py：0 fail
+```
+
+下一轮真机必须看：
+
+```text
+boot build=2026-08-31-static-props-bake
+ensureCamp done ... staticBase=true
+perf scene=play frames=... slow=... maxDtMs=... mode=static_play_fx/console_single_stream_no_stop
+```
+
+判断口径：
+
+- 若帧率明显升到两位数：可逐步加回少量动态（例如 4～8 格真水帧，或 2～3 棵近景摆动树），不要一次全开。
+- 若仍约 4–5 FPS：瓶颈更可能在鱼鸟虫/`drawFitted` 大纹理/Lua 热路径，下一步再减 `critterFx` 或拆 `drawPlayTop`。
 
 ### 12.2 Agent 验收约定
 

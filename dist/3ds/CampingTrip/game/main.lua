@@ -7,21 +7,28 @@ local TOP_W, TOP_H = 400, 240
 local BOT_W, BOT_H = 320, 240
 local TILE = 16
 
+AP = require("asset_paths")
+DripBrew = require("drip_brew")
+TeaBrew = require("tea_brew")
+FishRod = require("fish_rod")
+Audio = require("audio")
+Assets = require("assets")
+CampMap = require("camp_map")
+CampPreload = require("camp_preload")
+CampWorld = require("camp_world")
+CampTiles = require("draw.camp_tiles")
+CampRender = require("camp_render")
+
 local isConsole = love.system.getOS() == "Horizon" or love.system.getOS() == "3DS"
 local desktopBottom
 local uiFont, titleFont
-local assets = {}
-local bgm = { title = nil, morning = nil, night = nil, current = nil }
-local amb = { birds = nil, crickets = nil, creek = nil }
-local sfx = {}
-local consoleAudioRoot = "audio/3ds/"
-local consoleAudioMode = isConsole and "console_single_stream_no_stop" or "desktop_full_audio"
 local buildId = "2026-08-31-precomposed-camp-coffee-cup"
 -- First hardware diagnostic pass: isolate static-map cost from animated effects.
 local staticPlayFx = isConsole or os.getenv("LINJIAN_PLAY_FX") == "static"
 local perfMode = staticPlayFx and "static_play_fx" or "full_play_fx"
 local campCanvasEnabled = staticPlayFx and not isConsole
 local cheapWindFx = isConsole or not staticPlayFx
+local critterFx = (not staticPlayFx) or isConsole or os.getenv("LINJIAN_CRITTER_FX") == "1"
 
 -- Keep enough evidence to distinguish render stalls from audio stalls on hardware.
 local perfWindow = 0
@@ -115,30 +122,43 @@ local gear = {
 
 local codex = { i = 1 }
 
-local map = {}
-local decals = {} -- {x=, y=, kind=, v=}
-local firepit = { x = 12, y = 10 }
-local fishFX = { timer = 2.5, jumps = {} } -- occasional splash jumps
-local treeTiles = {}
-local decalRows = {}
-local propRows = {}
-local treeVariants = {}
-local nestTiles = {}
-local campGroundCanvas = nil
-local campGroundCanvasTried = false
-local critters = { birds = {}, bugs = {}, birdT = 1.4, bugT = 2.2 }
-local updateFish, spawnFishJump, drawFish, drawDecalsForRow, updateTimedRitual, goCodex, goAbout
-local updateCritters, spawnBird, spawnBug, drawCritters
-local updateNight, drawNightSky, spawnMeteor, spawnLeaf
-local buildCampGroundCanvas
 
 -- tile: 0/1 grass, 2 creek, 3 tree, 4 rock, 5 tent, 6 bush, 7 dirt pad, 8 shallow ford
-local function isWater(t) return t == 2 or t == 8 end
-local function isDeepWater(t) return t == 2 end
-local function isOpenGround(t) return t == 0 or t == 1 or t == 7 end
 
 local playtest = { on = false, t = 0, step = 0, done = false, log = {}, outDir = "playtest", _walk = 0 }
 local playtestTick
+
+local cupStyle = 1
+local cupPick = false
+local CUP_COLS = 3
+
+local function cupSlotRect(i)
+  local col = (i - 1) % CUP_COLS
+  local row = math.floor((i - 1) / CUP_COLS)
+  local slotW = 96
+  return 16 + col * slotW, 44 + row * 58, slotW - 4, 54
+end
+
+function applyCupIcon()
+  local a = Assets.get()
+  if not a.cupIcons then return end
+  for _, g in ipairs(gear) do
+    if g.id == "cup" then g.icon = a.cupIcons[cupStyle] or g.icon end
+  end
+end
+
+local function nudgeCupStyle(dx, dy)
+  local n = #AP.CUP_STYLES
+  if dx ~= 0 then
+    cupStyle = ((cupStyle - 1 + dx) % n) + 1
+  elseif dy ~= 0 then
+    local nextI = cupStyle + dy * CUP_COLS
+    if nextI < 1 then nextI = nextI + n elseif nextI > n then nextI = nextI - n end
+    cupStyle = nextI
+  end
+  applyCupIcon()
+  Audio.playSfx("ui_move")
+end
 
 local function playtestLog(msg)
   playtest.log[#playtest.log + 1] = msg
@@ -169,29 +189,6 @@ local function starAlpha()
   return 0
 end
 
-local nightFX = { stars = {}, meteors = {}, leaves = {}, meteorT = 1.6, leafT = 0.4 }
-
-local function seedStars()
-  nightFX.stars = {}
-  local rng = love.math.newRandomGenerator(77)
-  for i = 1, 36 do
-    nightFX.stars[i] = {
-      x = rng:random(6, TOP_W - 6),
-      y = rng:random(4, i <= 22 and 72 or 108),
-      p = rng:random() * 6.28,
-      s = rng:random(1, 2),
-      plus = (i % 7 == 0)
-    }
-  end
-end
-
-local function walkable(tx, ty)
-  local row = map[ty]
-  if not row then return false end
-  local t = row[tx]
-  -- 小溪可趟过去；泥地空场可走；树/灌木/大石阻挡
-  return t == 0 or t == 1 or t == 2 or t == 5 or t == 7 or t == 8
-end
 
 local function say(msg, sec)
   toast = msg
@@ -210,570 +207,24 @@ local function appendLoadLog(line)
   end)
 end
 
-local function detectAssetRoot()
-  assetRoot = ""
-  if isConsole and love.filesystem.mountFullPath then
-    local ok, mounted = pcall(
-      love.filesystem.mountFullPath,
-      "sdmc:/",
-      "sdmc",
-      "read",
-      true
-    )
-    appendLoadLog("mountFullPath ok=" .. tostring(ok) .. " mounted=" .. tostring(mounted))
-    if ok and mounted then
-      assetRoot = "sdmc/3ds/CampingTrip/game/"
-      return
-    end
-  end
-  if love.filesystem.getInfo and love.filesystem.getInfo("assets/title_top.png") then
-    return
-  end
-  if love.filesystem.getInfo and love.filesystem.getInfo("game/assets/title_top.png") then
-    assetRoot = "game/"
-  end
-end
-
-local function assetPath(rel)
-  return assetRoot .. rel
-end
-
-local function tryNewImage(path)
-  local ok, img = pcall(love.graphics.newImage, path)
-  if ok and img then return img, nil end
-  return nil, img
-end
-
-local function loadImage(path)
-  if failedImages[path] then return nil end
-  local resolved = assetPath(path)
-  local img, err = tryNewImage(resolved)
-  if img then
-    pcall(function() img:setFilter("nearest", "nearest") end)
-    return img
-  end
-  failedImages[path] = true
-  loadFailCount = loadFailCount + 1
-  appendLoadLog("fail " .. resolved .. " " .. tostring(err))
-  return nil
-end
-
-local function writeLoadProbe()
-  if not isConsole then return end
-  appendLoadLog("os=" .. tostring(love.system.getOS()))
-  if love.filesystem.getIdentity then
-    appendLoadLog("identity=" .. tostring(love.filesystem.getIdentity()))
-  end
-  if love.filesystem.getSaveDirectory then
-    appendLoadLog("save=" .. tostring(love.filesystem.getSaveDirectory()))
-  end
-  if love.filesystem.getSource then
-    appendLoadLog("source=" .. tostring(love.filesystem.getSource()))
-  end
-  appendLoadLog("assetRoot=" .. assetRoot)
-  for _, p in ipairs({
-    assetPath("assets/title_top.png"),
-    "assets/title_top.png",
-    "game/assets/title_top.png",
-    "assets/tile_grass0.png",
-    "assets/story/p1.png"
-  }) do
-    local info = love.filesystem.getInfo and love.filesystem.getInfo(p)
-    appendLoadLog("info " .. p .. " " .. (info and tostring(info.size or "ok") or "nil"))
-  end
-end
-
--- 3DS 上大图可能被 pad 成 2 的幂；按逻辑尺寸裁出来画
-local fitQuads = {}
-local function drawFitted(img, x, y, srcW, srcH, sx, sy)
-  if not img then return end
-  sx, sy = sx or 1, sy or 1
-  local iw, ih = img:getWidth(), img:getHeight()
-  if srcW and srcH and (iw > srcW or ih > srcH) then
-    local q = fitQuads[img]
-    if not q then
-      local ok, made = pcall(love.graphics.newQuad, 0, 0, srcW, srcH, iw, ih)
-      if ok then
-        q = made
-        fitQuads[img] = q
-      end
-    end
-    if q then
-      love.graphics.draw(img, q, x, y, 0, sx, sy)
-      return
-    end
-  end
-  love.graphics.draw(img, x, y, 0, sx, sy)
-end
-
-local function ensureStory(key)
-  assets.story = assets.story or {}
-  if not assets.story[key] then
-    assets.story[key] = loadImage("assets/story/" .. key .. ".png")
-  end
-  return assets.story[key]
-end
-
-local function ensureCast(i)
-  assets.cast = assets.cast or {}
-  if not assets.cast[i] then
-    assets.cast[i] = loadImage("assets/cast/c" .. i .. ".png")
-  end
-  return assets.cast[i]
-end
-
-local function ensureWalk(i)
-  assets.walk = assets.walk or {}
-  if assets.walk[i] then return assets.walk[i] end
-  local sheet = loadImage("assets/cast/c" .. i .. "_walk.png")
-  if not sheet then return nil end
-  local quads = {}
-  for row = 0, 3 do
-    quads[row] = {}
-    for col = 0, 2 do
-      local ok, q = pcall(love.graphics.newQuad, col * 40, row * 40, 40, 40, sheet:getDimensions())
-      if not ok then return nil end
-      quads[row][col] = q
-    end
-  end
-  assets.walk[i] = { sheet = sheet, quads = quads }
-  return assets.walk[i]
-end
-
-local function ensureRitual()
-  if assets.ritual and assets.ritual.ready then return assets.ritual end
-  assets.ritual = {
-    ready = true,
-    drip = {
-      loadImage("assets/ritual/drip_1.png"),
-      loadImage("assets/ritual/drip_2.png"),
-      loadImage("assets/ritual/drip_3.png")
-    },
-    fishAnim = {},
-    fanAnim = {}
-  }
-  for i = 0, 3 do
-    assets.ritual.fishAnim[i + 1] = loadImage("assets/world/fish_anim_" .. i .. ".png")
-    assets.ritual.fanAnim[i + 1] = loadImage("assets/world/fan_anim_" .. i .. ".png")
-  end
-  return assets.ritual
-end
-
-local function newFontSized(size)
-  if isConsole then
-    local ok, font = pcall(love.graphics.newFont, "chinese", size)
-    if ok and font then return font end
-    ok, font = pcall(love.graphics.newFont, size)
-    return ok and font or nil
-  end
-  for _, path in ipairs({
-    "fonts/zh-ui.ttf",
-    "/System/Library/Fonts/Hiragino Sans GB.ttc",
-    "/System/Library/Fonts/STHeiti Light.ttc"
-  }) do
-    local ok, font = pcall(love.graphics.newFont, path, size)
-    if ok and font then return font end
-  end
-  return love.graphics.newFont(size)
-end
-
-local function creekCenterX(y)
-  -- 效果图：小溪靠右，弯度一次只偏一格，少折线台阶
-  local wiggle = math.floor(1.7 * math.sin(y * 0.40) + 0.7 * math.sin(y * 0.88 + 1.0))
-  return 17 + wiggle
-end
-
-local function buildMap()
-  local cols, rows = TOP_W / TILE, TOP_H / TILE
-  decals = {}
-  treeTiles = {}
-  critters.birds, critters.bugs = {}, {}
-  critters.birdT, critters.bugT = 1.4, 2.2
-  for y = 0, rows - 1 do
-    map[y] = {}
-    local cx = creekCenterX(y)
-    local wide = 1
-    for x = 0, cols - 1 do
-      local t = ((x * 3 + y * 5) % 2 == 0) and 0 or 1
-      local dx = x - cx
-      if math.abs(dx) <= wide then
-        t = 2
-      elseif math.abs(dx) == wide + 1 then
-        t = 8 -- 浅滩 / 溪岸
-      end
-      map[y][x] = t
-    end
-  end
-
-  -- 营地泥地空场（对标效果图中央 clearing）
-  for y = 8, 12 do
-    for x = 8, 13 do
-      if map[y] and map[y][x] and not isWater(map[y][x]) then
-        map[y][x] = 7
-      end
-    end
-  end
-  -- 浅滩渡口（更宽一段）
-  for y = 5, 9 do
-    local cx = creekCenterX(y)
-    for x = cx - 2, cx + 2 do
-      if map[y] and x >= 0 and map[y][x] ~= nil then
-        if math.abs(x - cx) <= 1 then map[y][x] = 8
-        elseif isDeepWater(map[y][x]) then map[y][x] = 8 end
-      end
-    end
-  end
-
-  local trees = {
-    {1,1,0},{2,0,2},{4,1,1},{6,0,3},{0,3,4},{3,4,5},{7,2,6},{9,0,7},
-    {1,6,2},{2,8,0},{4,7,3},{0,10,1},{3,11,5},{5,13,4},{7,13,6},
-    {10,1,1},{16,0,7},{18,0,0},{19,2,2},{21,1,3},{22,3,5},{23,0,4},
-    {20,5,6},{22,6,0},{23,8,7},{23,10,1},{21,12,2},{23,13,5},
-    {6,5,3},{8,3,2},{2,12,4},{0,7,1}
-  }
-  for _, p in ipairs(trees) do
-    local x, y, v = p[1], p[2], p[3] or 0
-    if map[y] and map[y][x] and not isWater(map[y][x]) then
-      map[y][x] = 3
-      decals[#decals + 1] = { x = x, y = y, kind = "tree", v = v }
-      treeTiles[#treeTiles + 1] = { x = x, y = y, v = v }
-    end
-  end
-  -- 几棵树上有巢
-  for i = 1, math.min(4, #treeTiles) do
-    local t = treeTiles[1 + (i * 5 + 2) % #treeTiles]
-    decals[#decals + 1] = { x = t.x, y = t.y, kind = "nest", v = i % 3 }
-  end
-
-  for _, p in ipairs({ {5,3,0},{8,6,1},{13,5,2},{17,6,0},{11,11,1},{4,9,2},{19,10,0} }) do
-    local x, y, v = p[1], p[2], p[3]
-    if map[y] and map[y][x] and not isWater(map[y][x]) and map[y][x] ~= 3 then
-      map[y][x] = 6
-      decals[#decals + 1] = { x = x, y = y, kind = "bush", v = v }
-    end
-  end
-
-  for _, p in ipairs({ {8,7,0},{14,6,1},{6,12,2},{12,4,0},{20,5,1} }) do
-    local x, y, v = p[1], p[2], p[3]
-    if map[y] and map[y][x] and not isWater(map[y][x]) and map[y][x] < 3 then
-      map[y][x] = 4
-      decals[#decals + 1] = { x = x, y = y, kind = "stone", v = v }
-    end
-  end
-
-  -- flowers / reeds / logs（不挡路）
-  for _, p in ipairs({
-    {5,5,"flower",0},{7,4,"flower",1},{10,7,"flower",2},{13,9,"flower",3},
-    {15,6,"flower",1},{3,7,"flower",0},{9,11,"flower",2},{18,4,"flower",3},
-    {16,7,"reed",0},{19,8,"reed",0},{17,11,"reed",0},{21,6,"reed",0},
-    {11,8,"log",0},{4,11,"log",0},
-    {12,9,"stump",0},
-    {6,8,"flower",0},{9,7,"flower",1},{14,8,"flower",2},{8,11,"flower",3},
-    {10,12,"flower",1},{7,10,"flower",0}
-  }) do
-    local x, y, kind, v = p[1], p[2], p[3], p[4]
-    if map[y] and map[y][x] and (isOpenGround(map[y][x]) or isWater(map[y][x])) then
-      if kind == "reed" and not isWater(map[y][x]) then
-        -- reeds prefer water edge
-      else
-        decals[#decals + 1] = { x = x, y = y, kind = kind, v = v }
-      end
-    end
-    if kind == "reed" then
-      local cx = creekCenterX(y)
-      decals[#decals + 1] = { x = cx - 1, y = y, kind = "reed", v = 0 }
-    end
-  end
-
-  map[10][11] = 5
-  map[10][12] = 7
-  firepit.x, firepit.y = 12, 10
-
-  -- 浅滩踏脚石 + 溪尾小码头
-  for _, p in ipairs({ {creekCenterX(6), 6, 0}, {creekCenterX(7) + 1, 7, 1}, {creekCenterX(8), 8, 2} }) do
-    local x, y, v = p[1], p[2], p[3]
-    if map[y] and map[y][x] and isWater(map[y][x]) then
-      decals[#decals + 1] = { x = x, y = y, kind = "step", v = v }
-    end
-  end
-  do
-    local y, x = 13, creekCenterX(13)
-    if map[y] and map[y][x] then
-      decals[#decals + 1] = { x = x, y = y, kind = "pier", v = 0 }
-    end
-  end
-end
-
-local function tileKey(x, y)
-  return tostring(x) .. ":" .. tostring(y)
-end
-
-local function indexCampRenderData()
-  local cols, rows = TOP_W / TILE, TOP_H / TILE
-  decalRows, propRows, treeVariants, nestTiles = {}, {}, {}, {}
-  for y = 0, rows - 1 do
-    decalRows[y], propRows[y] = {}, {}
-  end
-  for _, d in ipairs(decals) do
-    if decalRows[d.y] then decalRows[d.y][#decalRows[d.y] + 1] = d end
-    if d.kind == "tree" then treeVariants[tileKey(d.x, d.y)] = d.v % 8 end
-    if d.kind == "nest" then nestTiles[tileKey(d.x, d.y)] = true end
-  end
-  for y = 0, rows - 1 do
-    for x = 0, cols - 1 do
-      local t = map[y] and map[y][x]
-      if t == 3 or t == 4 or t == 5 or t == 6 then
-        propRows[y][#propRows[y] + 1] = { t = t, x = x, y = y }
-      end
-    end
-  end
-end
-
-local function loadAssets()
-  -- 启动只加载标题三张，营地贴图进 play 再读，避免开机黑很久
-  assets.titleTop = loadImage("assets/title_top.png")
-  assets.titleBot = loadImage("assets/title_bot.png")
-  assets.packBg = loadImage("assets/ui_pack_bg.png")
-  assets.story, assets.cast, assets.walk = {}, {}, {}
-  assets.ritual = { ready = false, drip = {}, fishAnim = {}, fanAnim = {} }
-  appendLoadLog("loadAssets title done fails=" .. loadFailCount)
-end
-
-local campReady = false
-local function ensureCamp()
-  if campReady then return end
-  local startedAt = love.timer.getTime()
-  appendLoadLog("camp_load_begin mode=" .. perfMode)
-  campReady = true
-  assets.grass, assets.water, assets.shallow, assets.trees = {}, {}, {}, {}
-  assets.bushes, assets.flowers, assets.stones, assets.dirt = {}, {}, {}, {}
-  assets.campStaticBase = staticPlayFx and loadImage("assets/camp_static_base.png") or nil
-  local useStaticBase = staticPlayFx and assets.campStaticBase ~= nil
-  if not useStaticBase then
-    for i = 0, 7 do assets.grass[i] = loadImage("assets/tile_grass" .. i .. ".png") end
-    for i = 0, 3 do assets.dirt[i] = loadImage("assets/tile_dirt" .. i .. ".png") end
-    local waterFrames = staticPlayFx and 0 or 3
-    for i = 0, waterFrames do assets.water[i] = loadImage("assets/tile_water" .. i .. ".png") end
-    for i = 0, waterFrames do assets.shallow[i] = loadImage("assets/tile_shallow" .. i .. ".png") end
-  end
-  for i = 0, 7 do assets.trees[i] = loadImage("assets/tile_tree" .. i .. ".png") end
-  for i = 0, 2 do assets.bushes[i] = loadImage("assets/tile_bush" .. i .. ".png") end
-  if not useStaticBase then
-    for i = 0, 3 do assets.flowers[i] = loadImage("assets/prop_flower" .. i .. ".png") end
-  end
-  for i = 0, 2 do assets.stones[i] = loadImage("assets/tile_stone" .. i .. ".png") end
-  if not useStaticBase then
-    assets.reed = loadImage("assets/prop_reed.png")
-    assets.log = loadImage("assets/prop_log.png")
-    assets.stump = loadImage("assets/prop_stump.png")
-    assets.pier = loadImage("assets/prop_pier.png")
-  end
-  assets.shadow = loadImage("assets/prop_shadow.png")
-  assets.shadowSm = loadImage("assets/prop_shadow_sm.png")
-  assets.shadowTree = loadImage("assets/prop_shadow_tree.png")
-  if staticPlayFx then
-    assets.fish, assets.birds, assets.butterfly, assets.firefly = {}, {}, {}, {}
-  else
-    assets.fish = {}
-    for i = 0, 4 do assets.fish[i] = loadImage("assets/world/fish_" .. i .. ".png") end
-    assets.birds = {}
-    for i = 0, 2 do
-      assets.birds[i] = {
-        perch = loadImage("assets/world/bird_" .. i .. "_perch.png"),
-        fly = {
-          loadImage("assets/world/bird_" .. i .. "_fly0.png"),
-          loadImage("assets/world/bird_" .. i .. "_fly1.png")
-        }
-      }
-    end
-    assets.butterfly = {
-      loadImage("assets/world/butterfly_0.png"),
-      loadImage("assets/world/butterfly_1.png")
-    }
-    assets.dragonfly = loadImage("assets/world/dragonfly.png")
-    assets.firefly = {
-      loadImage("assets/world/firefly_0.png"),
-      loadImage("assets/world/firefly_1.png")
-    }
-  end
-  assets.nest = loadImage("assets/world/nest.png")
-  if not useStaticBase then
-    assets.shore = {
-      E = loadImage("assets/shore_E.png"), W = loadImage("assets/shore_W.png"),
-      N = loadImage("assets/shore_N.png"), S = loadImage("assets/shore_S.png"),
-      SE = loadImage("assets/shore_SE.png"), NE = loadImage("assets/shore_NE.png"),
-      NW = loadImage("assets/shore_NW.png"), SW = loadImage("assets/shore_SW.png")
-    }
-  else
-    assets.shore = nil
-  end
-  assets.tent = loadImage("assets/tile_tent.png")
-  assets.tentOpen = loadImage("assets/tile_tent_open.png") or assets.tent
-  assets.tentPacked = loadImage("assets/tile_tent_packed.png")
-  assets.firepit = loadImage("assets/prop_firepit.png")
-  if staticPlayFx then
-    assets.steam = {}
-  else
-    assets.brewKit = loadImage("assets/world/brew_kit.png")
-    assets.steam = {
-      loadImage("assets/world/steam_0.png"),
-      loadImage("assets/world/steam_1.png"),
-      loadImage("assets/world/steam_2.png")
-    }
-  end
-  ensureCast(1)
-  assets.player = assets.cast[1] or loadImage("assets/player.png")
-  for _, g in ipairs(gear) do
-    g.icon = loadImage("assets/gear_" .. g.id .. ".png")
-  end
-  if collectgarbage then pcall(collectgarbage, "collect") end
-  buildCampGroundCanvas()
-  appendLoadLog(string.format(
-    "ensureCamp done fails=%d durationMs=%.1f mode=%s staticBase=%s",
-    loadFailCount, (love.timer.getTime() - startedAt) * 1000, perfMode, tostring(useStaticBase)
-  ))
-end
-
-local function loadBgm()
-  local prefix = isConsole and consoleAudioRoot or "audio/"
-  local function tryLoad(path, vol)
-    local ok, src = pcall(love.audio.newSource, assetPath(prefix .. path), "stream")
-    if ok and src then
-      src:setLooping(true)
-      src:setVolume(vol or 0.55)
-      return src
-    end
-  end
-
-  if isConsole then
-    -- LovePotion 3DS has multiple public reports around Source:stop()/pause()
-    -- and stream switching. Keep hardware tests to one long-lived music stream.
-    bgm.morning = tryLoad("bgm_02_morning.ogg") or tryLoad("bgm_02_morning.mp3")
-    appendLoadLog("audio mode=" .. consoleAudioMode .. " bgm=morning ambience=off")
-    return
-  end
-
-  bgm.title = tryLoad("bgm_01_title.ogg") or tryLoad("bgm_01_title.mp3")
-  bgm.morning = tryLoad("bgm_02_morning.ogg") or tryLoad("bgm_02_morning.mp3")
-  bgm.night = tryLoad("bgm_03_night.ogg") or tryLoad("bgm_03_night.mp3")
-  -- Old 3DS: one ambience stream is enough; two extra decoders cause underruns.
-  if isConsole then
-    amb.creek = tryLoad("amb_creek.mp3", 0.14)
-  else
-    amb.birds = tryLoad("amb_birds.mp3", 0.22)
-    amb.crickets = tryLoad("amb_crickets.mp3", 0.26)
-    amb.creek = tryLoad("amb_creek.mp3", 0.16)
-  end
-end
-
-local function loadSfx()
-  local function tryStatic(path, vol)
-    local ok, src = pcall(love.audio.newSource, assetPath(path), "static")
-    if ok and src then
-      src:setVolume(vol or 0.5)
-      return src
-    end
-  end
-  sfx.step = tryStatic("audio/sfx_step.wav", 0.4)
-  sfx.tent = tryStatic("audio/sfx_tent.wav", 0.55)
-  sfx.pour = tryStatic("audio/sfx_pour.wav", 0.5)
-  sfx.cup = tryStatic("audio/sfx_cup.wav", 0.55)
-  sfx.fan = tryStatic("audio/sfx_fan.wav", 0.45)
-  sfx.lantern = tryStatic("audio/sfx_lantern.wav", 0.6)
-  sfx.ui_move = tryStatic("audio/sfx_ui_move.wav", 0.35)
-  sfx.ui_ok = tryStatic("audio/sfx_ui_ok.wav", 0.5)
-end
-
-local function playSfx(name)
-  local src = sfx[name]
-  if not src then return end
-  if isConsole then
-    pcall(function()
-      if src:isPlaying() then return end
-      src:play()
-    end)
-    return
-  end
-  local ok, inst = pcall(function() return src:clone() end)
-  local voice = (ok and inst) and inst or src
-  if voice == src then src:stop() end
-  pcall(function() voice:setPitch(0.92 + love.math.random() * 0.16) end)
-  voice:play()
-end
-
-local function playBgm(src)
-  if bgm.current == src and src and src:isPlaying() then return end
-  if isConsole and bgm.current and bgm.current ~= src then
-    appendLoadLog("audio skip_switch mode=" .. consoleAudioMode)
-    return
-  end
-  if bgm.current then bgm.current:stop() end
-  bgm.current = src
-  if src then
-    if isConsole then
-      if not src:isPlaying() then src:play() end
-    else
-      src:stop(); src:play()
-    end
-  end
-end
-
-local function stopBgm()
-  if isConsole then
-    appendLoadLog("audio skip_stop_bgm mode=" .. consoleAudioMode)
-    return
-  end
-  if bgm.current then bgm.current:stop() end
-  bgm.current = nil
-end
-
-local function stopAmb()
-  if isConsole then return end
-  for _, src in pairs({ amb.birds, amb.crickets, amb.creek }) do
-    if src then src:stop() end
-  end
-end
-
-local function ensureAmb(src)
-  if not src then return end
-  if not src:isPlaying() then src:play() end
-end
-
--- play: 溪水常垫；白天鸟鸣 / 入夜～深夜虫鸣（与 BGM 叠，音量更低）
-local function syncAmbient()
-  if scene ~= "play" then
-    stopAmb()
-    return
-  end
-  ensureAmb(amb.creek)
-  if isConsole then return end
-  local night = (timeIndex >= 5 and timeIndex <= 6)
-  if night then
-    if amb.birds then amb.birds:stop() end
-    ensureAmb(amb.crickets)
-  else
-    if amb.crickets then amb.crickets:stop() end
-    ensureAmb(amb.birds)
-  end
-end
-
--- play: 清晨～黄昏 = morning；入夜～深夜 = night；黎明回到 morning
-local function syncPlayBgm()
-  if scene ~= "play" then return end
-  local night = (timeIndex >= 5 and timeIndex <= 6)
-  if night and bgm.night then
-    playBgm(bgm.night)
-  elseif bgm.morning then
-    playBgm(bgm.morning)
-  end
-  syncAmbient()
-end
 
 local function applyCast(id)
   player.castId = id
   ensureCast(id)
   ensureWalk(id)
-  assets.player = assets.cast[id] or assets.player
+  Assets.get().player = Assets.get().cast[id] or Assets.get().player
+end
+
+local function syncSceneBgm()
+  if scene == "play" then
+    Audio.syncPlayBgm()
+    return
+  end
+  if scene == "title" or scene == "codex" or scene == "about" or scene == "homecoming" then
+    if Audio.bgm.title then Audio.playBgm(Audio.bgm.title) end
+  elseif scene == "prologue" or scene == "depart" or scene == "cast" then
+    if Audio.bgm.morning then Audio.playBgm(Audio.bgm.morning) end
+  end
 end
 
 local function goTitle()
@@ -782,8 +233,8 @@ local function goTitle()
   cast.i = 1
   lanternOn, canGoHome = false, false
   timeIndex = 3
-  stopAmb()
-  playBgm(bgm.title)
+  Audio.stopAmb()
+  syncSceneBgm()
   say("触摸或方向键选择 · A 确认", 3)
 end
 
@@ -791,9 +242,8 @@ local function goPrologue()
   scene = "prologue"
   prologue.i = 1
   ensureStory("p1")
-  stopAmb()
-  stopBgm()
-  if bgm.morning then playBgm(bgm.morning) end
+  Audio.stopAmb()
+  syncSceneBgm()
   toast, toastT = "", 0
 end
 
@@ -812,7 +262,7 @@ end
 
 local function goPlay()
   scene = "play"
-  ensureCamp()
+  CampPreload.ensure()
   ensureWalk(player.castId or 1)
   player.x, player.y = 10, 9
   player.facing, player.walkFrame, player.walkTimer = 0, 0, 0
@@ -822,11 +272,13 @@ local function goPlay()
   tentOpen, brewActive, brewTimer, potSimmer = false, false, 0, 0
   drippedOnce = false
   coffeeCups = 0
+  cupStyle, cupPick = 1, false
   ritual = nil
-  critters.birds, critters.bugs = {}, {}
+  CampWorld.resetCritters()
+  local critters = CampWorld.getCritters()
   critters.birdT, critters.bugT = 0.4, 0.6
-  stopBgm()
-  syncPlayBgm()
+  Audio.stopBgm()
+  Audio.syncPlayBgm()
   say("到了 · 林间有小溪，可以趟过去", 3.5)
 end
 
@@ -837,7 +289,7 @@ end
 local function startDripRitual()
   if drippedOnce then
     selected = 5
-    playSfx("cup")
+    Audio.playSfx("cup")
     coffeeCups = coffeeCups + 1
     say("喝了一口咖啡 · 第" .. coffeeCups .. "口", 2.5)
     return
@@ -847,7 +299,7 @@ local function startDripRitual()
   brewActive = true
   brewX, brewY = player.x, player.y
   brewTimer = 8
-  playSfx("pour")
+  Audio.playSfx("pour")
   say("闷蒸 · 按 A 下一步", 3)
 end
 
@@ -856,21 +308,21 @@ local function advanceDripRitual()
   if ritual.step < ritual.max then
     ritual.step = ritual.step + 1
     local labels = { "闷蒸", "绕圈注水", "分享入杯" }
-    if ritual.step == 2 then playSfx("pour")
-    elseif ritual.step == 3 then playSfx("cup") end
+    if ritual.step == 2 then Audio.playSfx("pour")
+    elseif ritual.step == 3 then Audio.playSfx("cup") end
     say(labels[ritual.step] .. " · 按 A 下一步", 2.5)
   else
     drippedOnce = true
     selected = 5
     clearRitual()
     brewTimer = 6
-    playSfx("cup")
+    Audio.playSfx("cup")
     coffeeCups = coffeeCups + 1
     say("第一口咖啡……周末真好。杯子可继续喝。", 3)
     if timeIndex < 4 then
       timeIndex = timeIndex + 1
       say("时间到了 · " .. timeSlots[timeIndex], 2)
-      syncPlayBgm()
+      Audio.syncPlayBgm()
     end
   end
 end
@@ -880,14 +332,22 @@ local function drinkCoffee()
     say("杯子还是空的 · 先手冲吧。", 2.5)
     return
   end
+  if not cupPick then
+    cupPick = true
+    say("选杯子 · 方向键 · A 喝一口", 2.8)
+    return
+  end
   coffeeCups = coffeeCups + 1
-  playSfx("cup")
-  say("喝了一口咖啡 · 第" .. coffeeCups .. "口", 2.5)
+  cupPick = false
+  Audio.playSfx("cup")
+  local nm = AP.CUP_STYLES[cupStyle] and AP.CUP_STYLES[cupStyle].name or "杯子"
+  say(nm .. " · 第" .. coffeeCups .. "口", 2.5)
 end
 
 local function startRodRitual()
   ensureRitual()
   ritual = { kind = "rod", step = 1, max = 4, t = 0, frameDur = 0.45 }
+  fishFX = CampWorld.getFishFX()
   fishFX.timer = 0.2
   say("抛竿……", 1.5)
 end
@@ -895,7 +355,7 @@ end
 local function startFanRitual()
   ensureRitual()
   ritual = { kind = "fan", step = 1, max = 4, t = 0, frameDur = 0.35 }
-  playSfx("fan")
+  Audio.playSfx("fan")
   say("扇风……", 1.2)
 end
 
@@ -907,10 +367,11 @@ updateTimedRitual = function(dt)
   if ritual.step < ritual.max then
     ritual.step = ritual.step + 1
     if ritual.kind == "rod" and ritual.step == 4 then
+      fishFX = CampWorld.getFishFX()
       fishFX.timer = 0.05
       say("有鱼！……又溜了。", 2.5)
     elseif ritual.kind == "fan" and ritual.step == 3 then
-      playSfx("fan")
+      Audio.playSfx("fan")
       say("凉快一点了。", 2)
     end
   else
@@ -928,7 +389,7 @@ local function toggleTent()
     return
   end
   tentOpen = not tentOpen
-  playSfx("tent")
+  Audio.playSfx("tent")
   if tentOpen then
     say("帐篷搭好了。", 2.5)
   else
@@ -949,6 +410,7 @@ local function tryUseGear()
   end
   local g = gear[selected]
   if not g then return end
+  local firepit = CampMap.getFirepit()
   local nearFire = math.abs(player.x - firepit.x) + math.abs(player.y - firepit.y) <= 2
 
   if g.id == "tent" then
@@ -965,7 +427,7 @@ local function tryUseGear()
   elseif g.id == "rod" then
     local nearCreek = false
     for _, d in ipairs({ {0, 0}, {1, 0}, {-1, 0}, {0, 1}, {0, -1} }) do
-      local row = map[player.y + d[2]]
+      local row = CampMap.getMap()[player.y + d[2]]
       local tt = row and row[player.x + d[1]]
       if tt == 2 or tt == 8 then nearCreek = true; break end
     end
@@ -985,7 +447,7 @@ local function tryUseGear()
   if nearFire and timeIndex >= 5 and not lanternOn then
     lanternOn = true
     canGoHome = true
-    playSfx("lantern")
+    Audio.playSfx("lantern")
     say("点亮了露营灯 · 夜色温柔。", 3.5)
   end
 end
@@ -993,11 +455,11 @@ end
 local function tryMove(dx, dy)
   if ritual then return end
   local nx, ny = player.x + dx, player.y + dy
-  if walkable(nx, ny) then
+  if CampMap.walkable(nx, ny) then
     player.x, player.y = nx, ny
     player.walkFrame = (player.walkFrame == 1) and 2 or 1
     player.idleT = 0.28
-    playSfx("step")
+    Audio.playSfx("step")
   end
   if dx ~= 0 or dy ~= 0 then
     if math.abs(dx) > math.abs(dy) then
@@ -1013,9 +475,8 @@ local function goHomecoming()
   homecoming.i = 1
   ensureStory("h1")
   ritual = nil
-  stopAmb()
-  stopBgm()
-  if bgm.title then playBgm(bgm.title) end
+  Audio.stopAmb()
+  syncSceneBgm()
   toast, toastT = "", 0
 end
 
@@ -1045,7 +506,7 @@ local function advanceHome()
 end
 
 local function confirmCast()
-  playSfx("ui_ok")
+  Audio.playSfx("ui_ok")
   applyCast(cast.i)
   goDepart()
 end
@@ -1054,7 +515,7 @@ local function setCast(i)
   if cast.i == i then return end
   cast.i = i
   ensureCast(i)
-  playSfx("ui_move")
+  Audio.playSfx("ui_move")
 end
 
 local function startJourney()
@@ -1067,7 +528,7 @@ local function confirmMenu()
     if item and item.id == "continue" then say("还没有存档", 2) end
     return
   end
-  playSfx("ui_ok")
+  Audio.playSfx("ui_ok")
   if item.id == "start" then startJourney()
   elseif item.id == "codex" then goCodex()
   elseif item.id == "about" then goAbout()
@@ -1076,33 +537,33 @@ end
 
 goCodex = function()
   scene = "codex"
-  ensureCamp()
+  CampPreload.ensure()
   codex.i = 1
   toast, toastT = "", 0
-  playBgm(bgm.title)
+  syncSceneBgm()
 end
 
 goAbout = function()
   scene = "about"
   toast, toastT = "", 0
-  playBgm(bgm.title)
+  syncSceneBgm()
 end
 
 local function moveCodex(delta)
   local n = #gear
   codex.i = ((codex.i - 1 + delta) % n) + 1
-  playSfx("ui_move")
+  Audio.playSfx("ui_move")
 end
 
 local function setCodex(i)
   if i < 1 or i > #gear or i == codex.i then return end
   codex.i = i
-  playSfx("ui_move")
+  Audio.playSfx("ui_move")
 end
 
 local function moveMenu(delta)
   menuIndex = ((menuIndex - 1 + delta) % #menuItems) + 1
-  playSfx("ui_move")
+  Audio.playSfx("ui_move")
 end
 
 local function menuHit(lx, ly)
@@ -1127,14 +588,16 @@ local function advanceTime()
     timeIndex = timeIndex + 1
     say("时间到了 · " .. timeLabel(), 2.5)
     if timeSlots[timeIndex] == "入夜" or timeSlots[timeIndex] == "深夜" then
+      nightFX = CampWorld.getNightFX()
       nightFX.meteorT = 0.35
+      CampWorld.onEnterNight()
       for _ = 1, 4 do spawnBug() end
       say("入夜了 · 营火旁按 A 点灯。抬头有星星。", 3.5)
     elseif timeSlots[timeIndex] == "黎明" then
       canGoHome = true
       say("天亮了 · 可以收拾回家（下屏按钮）", 3.5)
     end
-    syncPlayBgm()
+    Audio.syncPlayBgm()
   else
     canGoHome = true
     say("可以回家了", 2)
@@ -1145,11 +608,11 @@ end
 
 local function advancePrimary()
   if scene == "title" then confirmMenu()
-  elseif scene == "prologue" then playSfx("ui_ok"); advancePrologue()
+  elseif scene == "prologue" then Audio.playSfx("ui_ok"); advancePrologue()
   elseif scene == "cast" then confirmCast()
-  elseif scene == "depart" then playSfx("ui_ok"); advanceDepart()
+  elseif scene == "depart" then Audio.playSfx("ui_ok"); advanceDepart()
   elseif scene == "play" then tryUseGear()
-  elseif scene == "homecoming" then playSfx("ui_ok"); advanceHome()
+  elseif scene == "homecoming" then Audio.playSfx("ui_ok"); advanceHome()
   end
 end
 
@@ -1169,7 +632,7 @@ local function onBottomTouch(lx, ly)
   if scene == "title" then
     local i = menuHit(lx, ly)
     if i then
-      if menuIndex ~= i then playSfx("ui_move") end
+      if menuIndex ~= i then Audio.playSfx("ui_move") end
       menuIndex = i
       confirmMenu()
     end
@@ -1205,7 +668,7 @@ local function onBottomTouch(lx, ly)
     else
   local i = hitGear(lx, ly)
   if i then
-        if selected ~= i then playSfx("ui_move") end
+        if selected ~= i then Audio.playSfx("ui_move") end
     selected = i
     say("选中 · " .. gear[i].name)
       end
@@ -1213,7 +676,99 @@ local function onBottomTouch(lx, ly)
   end
 end
 
-local audioReady = false
+
+local departPendingPlay = false
+
+local function bindCampModules()
+  local campHost = {
+    TOP_W = TOP_W, TOP_H = TOP_H, BOT_W = BOT_W, TILE = TILE,
+    isConsole = isConsole,
+    staticPlayFx = staticPlayFx,
+    campCanvasEnabled = campCanvasEnabled,
+    cheapWindFx = cheapWindFx,
+    critterFx = critterFx,
+    perfMode = perfMode,
+    AP = AP,
+    gear = gear,
+    Assets = Assets,
+    CampMap = CampMap,
+    CampPreload = CampPreload,
+    CampWorld = CampWorld,
+    CampTiles = CampTiles,
+    appendLoadLog = appendLoadLog,
+    getAssets = function() return Assets.get() end,
+    getScene = function() return scene end,
+    getRitual = function() return ritual end,
+    getPlayer = function() return player end,
+    getLanternOn = function() return lanternOn end,
+    getTentOpen = function() return tentOpen end,
+    getTitlePulse = function() return titlePulse end,
+    getWaterPhase = function() return waterPhase end,
+    isNight = isNight,
+    starAlpha = starAlpha,
+    timeLabel = timeLabel,
+    getTimeTint = function() return timeTint[timeIndex] or timeTint[3] end,
+    uiFont = uiFont,
+    drawPlayerAt = drawPlayerAt,
+    drawWorldFx = drawWorldFx,
+    drawRitualOverlay = drawRitualOverlay,
+    drawToast = drawToast,
+    buildCampGroundCanvas = function() CampTiles.buildCampGroundCanvas() end,
+    getCupStyle = function() return 1 end,
+    resetTent = function()
+      tentOpen = false
+    end,
+    onBuildStart = function() CampWorld.resetCritters() end,
+  }
+  Assets.bindHost({
+    isConsole = isConsole,
+    playtestWanted = playtestWanted,
+    appendLoadLog = appendLoadLog,
+    AP = AP,
+  })
+  CampMap.bindHost(campHost)
+  CampPreload.bindHost(campHost)
+  CampWorld.bindHost(campHost)
+  CampTiles.bindHost(campHost)
+  CampRender.bindHost(campHost)
+  Audio.bindHost({
+    isConsole = isConsole,
+    assetPath = Assets.path,
+    appendLoadLog = appendLoadLog,
+    getScene = function() return scene end,
+    playerNearWater = function(r)
+      r = r or 2
+      for dy = -r, r do
+        for dx = -r, r do
+          local t = CampMap.tileAt(player.x + dx, player.y + dy)
+          if t == 2 or t == 8 then return true end
+        end
+      end
+      return false
+    end,
+    playerNearBird = function(r)
+      r = r or 3
+      for _, b in ipairs(CampWorld.getCritters().birds or {}) do
+        local bx = (b.x or 0) / TILE
+        local by = (b.y or 0) / TILE
+        if math.abs(bx - player.x) + math.abs(by - player.y) <= r then return true end
+      end
+      return false
+    end,
+    isNight = isNight,
+  })
+end
+
+function loadAssets() Assets.loadBoot() end
+function detectAssetRoot() Assets.detectRoot() end
+function loadImage(path) return Assets.load(path) end
+function drawFitted(...) return Assets.drawFitted(...) end
+function ensureStory(k) return Assets.ensureStory(k) end
+function ensureCast(i) return Assets.ensureCast(i) end
+function ensureWalk(i) return Assets.ensureWalk(i) end
+function ensureRitual() return Assets.ensureRitual() end
+function tileAt(tx, ty) return CampMap.tileAt(tx, ty) end
+function drawPlayTop() CampRender.drawPlayTop() end
 
 function love.load()
   -- 真机第一句先落盘，后面崩了也知道进过 love.load
@@ -1222,23 +777,28 @@ function love.load()
   end
   pcall(love.graphics.setDefaultFilter, "nearest", "nearest")
   pcall(detectAssetRoot)
-  writeLoadProbe()
-  buildMap()
-  indexCampRenderData()
+  Assets.writeProbe()
+  CampMap.build()
+  CampMap.indexRenderData()
   loadAssets()
   if not isConsole then
-    loadBgm()
-    loadSfx()
+    Audio.loadBgm()
+    Audio.loadSfx()
   end
-  uiFont = newFontSized(14)
-  titleFont = newFontSized(26) or uiFont
+  uiFont = Assets.newFont(14)
+  titleFont = Assets.newFont(26) or uiFont
   if uiFont then love.graphics.setFont(uiFont) end
-  seedStars()
+  CampWorld.seedStars()
   if not isConsole then
     desktopBottom = love.graphics.newCanvas(BOT_W, BOT_H)
     love.window.setMode(TOP_W, TOP_H + BOT_H)
   end
-  if not isConsole then playBgm(bgm.title) end
+  if isConsole then
+    Audio.ensureConsoleLoaded()
+    syncSceneBgm()
+  else
+    syncSceneBgm()
+  end
   say("触摸或方向键选择 · A 确认", 4)
   if playtestWanted() and not isConsole then
     playtest.on = true
@@ -1275,14 +835,15 @@ playtestTick = function(dt)
   elseif s == 10 and t > 0.2 then advanceDepart(); nextStep()
   elseif s == 11 and t > 0.2 then advanceDepart(); playtestLog("-> " .. scene); nextStep()
   elseif s == 12 and t > 1.15 then
-    spawnBird(); spawnBird(); spawnBug(); spawnBug()
+    CampWorld.spawnBird(); CampWorld.spawnBird(); CampWorld.spawnBug(); CampWorld.spawnBug()
     playtestShot("05_camp")
+    local critters = CampWorld.getCritters()
     playtestLog("wildlife birds=" .. #critters.birds .. " bugs=" .. #critters.bugs)
     nextStep()
   elseif s == 12 then
     -- let birds leave the branch before the camp shot
-    if t > 0.35 and #critters.birds == 0 then spawnBird() end
-    if t > 0.55 and #critters.bugs == 0 then spawnBug() end
+    if t > 0.35 and #CampWorld.getCritters().birds == 0 then CampWorld.spawnBird() end
+    if t > 0.55 and #CampWorld.getCritters().bugs == 0 then CampWorld.spawnBug() end
   elseif s == 13 then
     -- four directions
     if t >= 0.12 then
@@ -1321,7 +882,7 @@ playtestTick = function(dt)
   elseif s == 22 and t > 0.5 then playtestShot("05d_fan"); tryUseGear(); nextStep() -- skip fan
   elseif s == 23 and t > 0.2 then
     -- walk toward creek and fish
-    player.x, player.y = creekCenterX(7), 7
+    player.x, player.y = CampMap.creekCenterX(7), 7
     selected = 4 -- rod
     tryUseGear()
     playtestLog("rod=" .. tostring(ritual and ritual.kind))
@@ -1329,14 +890,16 @@ playtestTick = function(dt)
   elseif s == 24 and t > 0.5 then playtestShot("05e_fish"); tryUseGear(); nextStep()
   elseif s == 25 and t > 0.25 then
     timeIndex = 5; selected = 3
+    local firepit = CampMap.getFirepit()
     player.x, player.y = firepit.x - 1, firepit.y
     tryUseGear()
     playtestLog("lantern=" .. tostring(lanternOn))
-    spawnMeteor(); spawnLeaf(); spawnLeaf(); spawnBug(); spawnBug()
-    for _, u in ipairs(critters.bugs) do u.kind = "firefly" end
+    CampWorld.spawnMeteor(); CampWorld.spawnLeaf(); CampWorld.spawnLeaf(); CampWorld.spawnBug(); CampWorld.spawnBug()
+    for _, u in ipairs(CampWorld.getCritters().bugs) do u.kind = "firefly" end
     nextStep()
   elseif s == 26 and t > 0.55 then
     playtestShot("06_night_lamp")
+    local nightFX = CampWorld.getNightFX()
     playtestLog("night stars=" .. #nightFX.stars .. " meteors=" .. #nightFX.meteors)
     nextStep()
   elseif s == 27 and t > 0.25 then goHomecoming(); playtestLog("-> " .. scene); nextStep()
@@ -1376,15 +939,11 @@ function love.update(dt)
   if perfWindow >= 5 then
     appendLoadLog(string.format(
       "perf scene=%s frames=%d slow=%d maxDtMs=%.1f mode=%s",
-      scene, perfFrames, perfSlowFrames, perfMaxDt * 1000, perfMode .. "/" .. consoleAudioMode
+      scene, perfFrames, perfSlowFrames, perfMaxDt * 1000, perfMode .. "/" .. Audio.consoleMode()
     ))
     perfWindow, perfFrames, perfSlowFrames, perfMaxDt = 0, 0, 0, 0
   end
-  if isConsole and not audioReady then
-    audioReady = true
-    pcall(loadBgm)
-    pcall(loadSfx)
-  end
+  Audio.ensureConsoleLoaded()
   titlePulse = titlePulse + dt
   waterPhase = waterPhase + dt * 2.2
   if toastT > 0 then toastT = toastT - dt end
@@ -1399,10 +958,11 @@ function love.update(dt)
       if player.idleT <= 0 then player.walkFrame = 0 end
     end
     if not staticPlayFx then
-      updateFish(dt)
-      updateCritters(dt)
-      updateNight(dt)
+      CampWorld.updateFish(dt)
+      CampWorld.updateCritters(dt)
+      CampWorld.updateNight(dt)
     end
+    Audio.tick(dt, titlePulse)
     updateTimedRitual(dt)
   end
   playtestTick(dt)
@@ -1439,6 +999,16 @@ function love.keypressed(key)
     elseif key == "return" or key == "space" or key == "a" then confirmCast()
     end
   elseif scene == "play" then
+    if cupPick then
+      if key == "left" or key == "a" then nudgeCupStyle(-1, 0)
+      elseif key == "right" or key == "d" then nudgeCupStyle(1, 0)
+      elseif key == "up" or key == "w" then nudgeCupStyle(0, -1)
+      elseif key == "down" or key == "s" then nudgeCupStyle(0, 1)
+      elseif key == "return" or key == "space" or key == "z" then drinkCoffee()
+      elseif key == "b" then cupPick = false
+      end
+      return
+    end
     if key == "up" or key == "w" then tryMove(0, -1)
     elseif key == "down" or key == "s" then tryMove(0, 1)
     elseif key == "left" then tryMove(-1, 0)
@@ -1482,6 +1052,16 @@ function love.gamepadpressed(_, button)
     elseif button == "a" then confirmCast()
     end
   elseif scene == "play" then
+    if cupPick then
+      if button == "dpleft" then nudgeCupStyle(-1, 0)
+      elseif button == "dpright" then nudgeCupStyle(1, 0)
+      elseif button == "dpup" then nudgeCupStyle(0, -1)
+      elseif button == "dpdown" then nudgeCupStyle(0, 1)
+      elseif button == "a" then drinkCoffee()
+      elseif button == "b" then cupPick = false
+      end
+      return
+    end
     if button == "dpup" then tryMove(0, -1)
     elseif button == "dpdown" then tryMove(0, 1)
     elseif button == "dpleft" then tryMove(-1, 0)
@@ -1506,7 +1086,7 @@ end
 
 -- —— draw helpers ——
 
-local function drawToast()
+function drawToast()
   if toastT <= 0 or toast == "" then return end
   if uiFont then love.graphics.setFont(uiFont) end
   local toastW = uiFont and uiFont:getWidth(toast) or 120
@@ -1554,7 +1134,7 @@ end
 
 local function drawTitleTop()
   love.graphics.setColor(1, 1, 1, 1)
-  if assets.titleTop then drawFitted(assets.titleTop, 0, 0, TOP_W, TOP_H)
+  if Assets.get().titleTop then drawFitted(Assets.get().titleTop, 0, 0, TOP_W, TOP_H)
   else
     love.graphics.setColor(0.35, 0.55, 0.4)
     love.graphics.rectangle("fill", 0, 0, TOP_W, TOP_H)
@@ -1589,7 +1169,7 @@ end
 
 local function drawTitleBottom()
   love.graphics.setColor(1, 1, 1, 1)
-  if assets.titleBot then drawFitted(assets.titleBot, 0, 0, BOT_W, BOT_H)
+  if Assets.get().titleBot then drawFitted(Assets.get().titleBot, 0, 0, BOT_W, BOT_H)
   else love.graphics.setColor(0.85, 0.75, 0.55); love.graphics.rectangle("fill", 0, 0, BOT_W, BOT_H) end
   if uiFont then love.graphics.setFont(uiFont) end
   love.graphics.setColor(1, 0.95, 0.85)
@@ -1615,7 +1195,7 @@ end
 
 local function drawCodexTop()
   love.graphics.setColor(1, 1, 1, 1)
-  if assets.titleTop then drawFitted(assets.titleTop, 0, 0, TOP_W, TOP_H)
+  if Assets.get().titleTop then drawFitted(Assets.get().titleTop, 0, 0, TOP_W, TOP_H)
   else love.graphics.setColor(0.28, 0.38, 0.26); love.graphics.rectangle("fill", 0, 0, TOP_W, TOP_H) end
   love.graphics.setColor(0.06, 0.05, 0.03, 0.42)
   love.graphics.rectangle("fill", 0, 0, TOP_W, TOP_H)
@@ -1654,9 +1234,9 @@ local function drawCodexTop()
 end
 
 local function drawCodexBottom()
-  if assets.packBg then
+  if Assets.get().packBg then
     love.graphics.setColor(1, 1, 1, 1)
-    drawFitted(assets.packBg, 0, 0, BOT_W, BOT_H)
+    drawFitted(Assets.get().packBg, 0, 0, BOT_W, BOT_H)
   else
     love.graphics.setColor(0.93, 0.88, 0.76)
     love.graphics.rectangle("fill", 0, 0, BOT_W, BOT_H)
@@ -1690,7 +1270,7 @@ end
 
 local function drawAboutTop()
   love.graphics.setColor(1, 1, 1, 1)
-  if assets.titleTop then drawFitted(assets.titleTop, 0, 0, TOP_W, TOP_H)
+  if Assets.get().titleTop then drawFitted(Assets.get().titleTop, 0, 0, TOP_W, TOP_H)
   else love.graphics.setColor(0.28, 0.38, 0.26); love.graphics.rectangle("fill", 0, 0, TOP_W, TOP_H) end
   love.graphics.setColor(0.06, 0.05, 0.03, 0.42)
   love.graphics.rectangle("fill", 0, 0, TOP_W, TOP_H)
@@ -1730,9 +1310,9 @@ local function drawAboutTop()
 end
 
 local function drawAboutBottom()
-  if assets.packBg then
+  if Assets.get().packBg then
     love.graphics.setColor(1, 1, 1, 1)
-    drawFitted(assets.packBg, 0, 0, BOT_W, BOT_H)
+    drawFitted(Assets.get().packBg, 0, 0, BOT_W, BOT_H)
   else
     love.graphics.setColor(0.93, 0.88, 0.76)
     love.graphics.rectangle("fill", 0, 0, BOT_W, BOT_H)
@@ -1814,472 +1394,7 @@ local function drawCastBottom()
   love.graphics.print("A 确认出发", 118, 213)
 end
 
-local function tileAt(tx, ty)
-  local row = map[ty]
-  return row and row[tx] or nil
-end
-
-local function drawGround(t, px, py, tx, ty)
-  love.graphics.setColor(1, 1, 1, 1)
-  if t == 2 or t == 8 then
-    local wi = staticPlayFx and 0 or (math.floor(waterPhase) % 4)
-    local sheet = (t == 8 and assets.shallow and assets.shallow[wi]) or (assets.water and assets.water[wi])
-    if sheet then love.graphics.draw(sheet, px, py)
-    else
-      love.graphics.setColor(t == 8 and 0.4 or 0.2, 0.55, 0.5)
-  love.graphics.rectangle("fill", px, py, TILE, TILE)
-    end
-    love.graphics.setColor(1, 1, 1, 1)
-    -- 水边薄岸：画在水格上，打断方砖缝
-    if assets.shore then
-      if not isWater(tileAt(tx + 1, ty)) and assets.shore.E then love.graphics.draw(assets.shore.E, px, py) end
-      if not isWater(tileAt(tx - 1, ty)) and assets.shore.W then love.graphics.draw(assets.shore.W, px, py) end
-      if not isWater(tileAt(tx, ty - 1)) and assets.shore.N then love.graphics.draw(assets.shore.N, px, py) end
-      if not isWater(tileAt(tx, ty + 1)) and assets.shore.S then love.graphics.draw(assets.shore.S, px, py) end
-    end
-    return
-  end
-  if t == 7 and assets.dirt and assets.dirt[(tx * 3 + ty * 5) % 4] then
-    love.graphics.draw(assets.dirt[(tx * 3 + ty * 5) % 4], px, py)
-  else
-    local grass = assets.grass[(tx * 17 + ty * 31) % 8]
-    if grass then love.graphics.draw(grass, px, py)
-    else love.graphics.setColor(0.43, 0.66, 0.28); love.graphics.rectangle("fill", px, py, TILE, TILE) end
-  end
-  if not assets.shore then return end
-  love.graphics.setColor(1, 1, 1, 1)
-  local E = isWater(tileAt(tx + 1, ty))
-  local W = isWater(tileAt(tx - 1, ty))
-  local N = isWater(tileAt(tx, ty - 1))
-  local S = isWater(tileAt(tx, ty + 1))
-  if E and assets.shore.E then love.graphics.draw(assets.shore.E, px, py) end
-  if W and assets.shore.W then love.graphics.draw(assets.shore.W, px, py) end
-  if N and assets.shore.N then love.graphics.draw(assets.shore.N, px, py) end
-  if S and assets.shore.S then love.graphics.draw(assets.shore.S, px, py) end
-  if N and E and assets.shore.NE then love.graphics.draw(assets.shore.NE, px, py) end
-  if N and W and assets.shore.NW then love.graphics.draw(assets.shore.NW, px, py) end
-  if S and E and assets.shore.SE then love.graphics.draw(assets.shore.SE, px, py) end
-  if S and W and assets.shore.SW then love.graphics.draw(assets.shore.SW, px, py) end
-end
-
-local function drawCampGroundLayer(cols, rows)
-  if assets.campStaticBase then
-    love.graphics.setColor(1, 1, 1, 1)
-    drawFitted(assets.campStaticBase, 0, 0, TOP_W, TOP_H)
-    return
-  end
-  for y = 0, rows - 1 do
-    for x = 0, cols - 1 do
-      drawGround(map[y][x], x * TILE, y * TILE, x, y)
-    end
-    drawDecalsForRow(y)
-  end
-end
-
-buildCampGroundCanvas = function()
-  if campGroundCanvasTried or not campCanvasEnabled then
-    if isConsole and not campGroundCanvasTried then
-      campGroundCanvasTried = true
-      appendLoadLog("camp_ground_canvas skipped=console_disabled")
-    end
-    return
-  end
-  campGroundCanvasTried = true
-  local startedAt = love.timer.getTime()
-  local ok, err = pcall(function()
-    campGroundCanvas = love.graphics.newCanvas(TOP_W, TOP_H)
-    love.graphics.setCanvas(campGroundCanvas)
-    love.graphics.clear(0.15, 0.18, 0.14, 1)
-    drawCampGroundLayer(TOP_W / TILE, TOP_H / TILE)
-    love.graphics.setCanvas()
-  end)
-  if not ok then
-    campGroundCanvas = nil
-    pcall(function() love.graphics.setCanvas() end)
-  end
-  appendLoadLog(string.format(
-    "camp_ground_canvas ok=%s durationMs=%.1f err=%s",
-    tostring(ok and campGroundCanvas ~= nil),
-    (love.timer.getTime() - startedAt) * 1000,
-    ok and "nil" or tostring(err)
-  ))
-end
-
-local function drawDropShadow(px, py, kind)
-  local img, ox, oy = assets.shadow, 4, 2
-  if kind == "sm" then
-    img, ox, oy = assets.shadowSm, 3, 2
-  elseif kind == "tree" then
-    img, ox, oy = assets.shadowTree or assets.shadow, 5, 3
-  end
-  if not img then return end
-  local iw, ih = img:getWidth(), img:getHeight()
-  love.graphics.setColor(1, 1, 1, 0.92)
-  love.graphics.draw(img, px + TILE / 2 - iw / 2 + ox, py + TILE - ih + oy)
-  love.graphics.setColor(1, 1, 1, 1)
-end
-
-drawDecalsForRow = function(rowY)
-  love.graphics.setColor(1, 1, 1, 1)
-  for _, d in ipairs(decalRows[rowY] or {}) do
-    local px, py = d.x * TILE, d.y * TILE
-    if d.kind == "flower" and assets.flowers then
-      local img = assets.flowers[d.v % 4]
-      if img then love.graphics.draw(img, px + 3, py + 4) end
-    elseif d.kind == "reed" and assets.reed then
-      love.graphics.draw(assets.reed, px + 2, py + TILE - assets.reed:getHeight())
-    elseif d.kind == "log" and assets.log then
-      love.graphics.draw(assets.log, px - 2, py + 6)
-    elseif d.kind == "stump" and assets.stump then
-      drawDropShadow(px, py, "sm")
-      love.graphics.draw(assets.stump, px + (TILE - assets.stump:getWidth()) / 2, py + TILE - assets.stump:getHeight())
-    elseif d.kind == "step" and assets.stones then
-      local img = assets.stones[d.v % 3]
-      if img then love.graphics.draw(img, px + 2, py + 6) end
-    elseif d.kind == "pier" and assets.pier then
-      love.graphics.draw(assets.pier, px + TILE - assets.pier:getWidth() + 4, py + 4)
-    end
-  end
-end
-
-local function treeVariant(tx, ty)
-  return treeVariants[tileKey(tx, ty)] or ((tx * 5 + ty * 3) % 8)
-end
-
-local function drawProp(t, px, py, tx, ty)
-  love.graphics.setColor(1, 1, 1, 1)
-  if t == 3 then
-    local tree = assets.trees and assets.trees[treeVariant(tx, ty)]
-    if tree then
-      local iw, ih = tree:getWidth(), tree:getHeight()
-      drawDropShadow(px, py, "tree")
-      local sway = cheapWindFx and
-        (math.sin(titlePulse * 1.5 + tx * 0.7 + ty) * (isNight() and 1.2 or 0.55)) or 0
-      love.graphics.draw(tree, px + (TILE - iw) / 2 + sway, py + TILE - ih)
-      if assets.nest and nestTiles[tileKey(tx, ty)] then
-        love.graphics.draw(assets.nest, px + (TILE - assets.nest:getWidth()) / 2 + 2 + sway, py - 4)
-      end
-    end
-  elseif t == 6 then
-    local bush = assets.bushes and assets.bushes[(tx + ty) % 3]
-    if bush then
-      drawDropShadow(px, py, "sm")
-      local sway = cheapWindFx and math.sin(titlePulse * 1.8 + tx) * 0.45 or 0
-      love.graphics.draw(bush, px + (TILE - bush:getWidth()) / 2 + sway, py + TILE - bush:getHeight())
-    end
-  elseif t == 4 then
-    local stone = assets.stones and assets.stones[(tx + ty) % 3]
-    if stone then
-      drawDropShadow(px, py, "sm")
-      love.graphics.draw(stone, px, py + TILE - stone:getHeight())
-    end
-  elseif t == 5 then
-    local img = tentOpen and (assets.tentOpen or assets.tent) or (assets.tentPacked or assets.tent)
-    if img then
-      local iw, ih = img:getWidth(), img:getHeight()
-      drawDropShadow(px, py, "lg")
-      love.graphics.draw(img, px + (TILE - iw) / 2, py + TILE - ih + 2)
-    end
-  end
-end
-
-spawnFishJump = function()
-  local rows = TOP_H / TILE
-  local candidates = {}
-  for y = 1, rows - 2 do
-    for x = 0, TOP_W / TILE - 1 do
-      if map[y] and isDeepWater(map[y][x]) then
-        candidates[#candidates + 1] = { x = x, y = y }
-      end
-    end
-  end
-  if #candidates == 0 then return end
-  local c = candidates[love.math.random(#candidates)]
-  fishFX.jumps[#fishFX.jumps + 1] = {
-    x = c.x * TILE + 2, y = c.y * TILE + 4, t = 0, life = 0.7
-  }
-end
-
-updateFish = function(dt)
-  fishFX.timer = fishFX.timer - dt
-  if fishFX.timer <= 0 then
-    fishFX.timer = 2.2 + love.math.random() * 2.8
-    if scene == "play" and not ritual then spawnFishJump() end
-  end
-  for i = #fishFX.jumps, 1, -1 do
-    local j = fishFX.jumps[i]
-    j.t = j.t + dt
-    if j.t >= j.life then table.remove(fishFX.jumps, i) end
-  end
-end
-
-drawFish = function()
-  if not assets.fish then return end
-  love.graphics.setColor(1, 1, 1, 1)
-  for _, j in ipairs(fishFX.jumps) do
-    local p = j.t / j.life
-    local frame = math.min(4, math.floor(p * 5))
-    local img = assets.fish[frame]
-    if img then
-      local arc = -math.sin(p * math.pi) * 14
-      love.graphics.draw(img, j.x, j.y + arc)
-    end
-  end
-end
-
-local function pickOpenNear(tx, ty)
-  local spots = {}
-  for dy = -2, 3 do
-    for dx = -3, 3 do
-      local x, y = tx + dx, ty + dy
-      if walkable(x, y) and map[y] and isOpenGround(map[y][x]) then
-        spots[#spots + 1] = { x = x, y = y }
-      end
-    end
-  end
-  if #spots == 0 then return tx, ty + 1 end
-  local s = spots[love.math.random(#spots)]
-  return s.x, s.y
-end
-
-spawnBird = function()
-  if #treeTiles == 0 or #critters.birds >= 3 then return end
-  local tree = treeTiles[love.math.random(#treeTiles)]
-  local gx, gy = pickOpenNear(tree.x, tree.y)
-  local kind = love.math.random(0, 2)
-  critters.birds[#critters.birds + 1] = {
-    kind = kind, state = "perch", t = 0,
-    perchWait = 0.8 + love.math.random() * 1.4,
-    treeX = tree.x, treeY = tree.y,
-    gx = gx, gy = gy, hop = 0,
-    x = tree.x * TILE + 2, y = tree.y * TILE - 10,
-    face = (gx >= tree.x) and 1 or -1
-  }
-end
-
-spawnBug = function()
-  if #critters.bugs >= (isNight() and 6 or 4) then return end
-  local roll = love.math.random()
-  local kind = "butterfly"
-  if isNight() and roll > 0.12 then kind = "firefly"
-  elseif roll > 0.7 then kind = "dragonfly" end
-  local x, y
-  if kind == "dragonfly" then
-    y = 4 + love.math.random(0, 8)
-    x = creekCenterX(y)
-  else
-    x = love.math.random(2, 20)
-    y = love.math.random(2, 12)
-  end
-  critters.bugs[#critters.bugs + 1] = {
-    kind = kind, t = 0, life = 4 + love.math.random() * 5,
-    ox = x * TILE + 4, oy = y * TILE + 4,
-    x = x * TILE + 4, y = y * TILE + 4,
-    vx = (love.math.random() < 0.5) and 18 or -18
-  }
-end
-
-updateCritters = function(dt)
-  critters.birdT = critters.birdT - dt
-  critters.bugT = critters.bugT - dt
-  if critters.birdT <= 0 then
-    critters.birdT = 4.5 + love.math.random() * 5
-    if scene == "play" and not ritual and not isNight() then spawnBird() end
-  end
-  if critters.bugT <= 0 then
-    critters.bugT = 3.2 + love.math.random() * 4
-    if scene == "play" and not ritual then spawnBug() end
-  end
-
-  for i = #critters.birds, 1, -1 do
-    local b = critters.birds[i]
-    b.t = b.t + dt
-    if b.state == "perch" then
-      if b.t >= b.perchWait then
-        b.state, b.t = "down", 0
-      end
-    elseif b.state == "down" then
-      local p = math.min(1, b.t / 0.85)
-      local sx, sy = b.treeX * TILE + 2, b.treeY * TILE - 10
-      local dx, dy = b.gx * TILE + 4, b.gy * TILE + 6
-      b.x = sx + (dx - sx) * p
-      b.y = sy + (dy - sy) * p - math.sin(p * math.pi) * 18
-      if p >= 1 then b.state, b.t, b.hop = "hop", 0, 0 end
-    elseif b.state == "hop" then
-      local p = (b.t % 0.35) / 0.35
-      b.x = b.gx * TILE + 4 + b.hop * 5 * b.face
-      b.y = b.gy * TILE + 6 - math.sin(p * math.pi) * 3
-      if b.t > 0.35 then
-        b.t, b.hop = 0, b.hop + 1
-        if b.hop >= 3 then b.state, b.t = "up", 0 end
-      end
-    elseif b.state == "up" then
-      local p = math.min(1, b.t / 0.9)
-      local sx, sy = b.gx * TILE + 4, b.gy * TILE + 6
-      local dx, dy = b.treeX * TILE + 2, b.treeY * TILE - 10
-      b.x = sx + (dx - sx) * p
-      b.y = sy + (dy - sy) * p - math.sin(p * math.pi) * 16
-      if p >= 1 then table.remove(critters.birds, i) end
-    end
-  end
-
-  for i = #critters.bugs, 1, -1 do
-    local u = critters.bugs[i]
-    u.t = u.t + dt
-    if u.kind == "butterfly" then
-      u.x = u.ox + math.sin(u.t * 2.4) * 16
-      u.y = u.oy + math.cos(u.t * 1.7) * 8
-    elseif u.kind == "dragonfly" then
-      u.x = u.x + u.vx * dt
-      u.y = u.oy + math.sin(u.t * 6) * 3
-      if u.x < 8 or u.x > TOP_W - 12 then u.vx = -u.vx end
-    else
-      u.x = u.ox + math.sin(u.t * 1.3) * 10
-      u.y = u.oy + math.cos(u.t * 1.8) * 7
-    end
-    if u.t >= u.life then table.remove(critters.bugs, i) end
-  end
-end
-
-drawCritters = function()
-  love.graphics.setColor(1, 1, 1, 1)
-  for _, b in ipairs(critters.birds) do
-    local pack = assets.birds and assets.birds[b.kind]
-    if pack then
-      local img = pack.perch
-      if b.state == "down" or b.state == "up" then
-        img = pack.fly and pack.fly[(math.floor(b.t * 10) % 2) + 1]
-      end
-      if img then
-        local sc = 2
-        local sx = (b.face < 0 and -sc or sc)
-        local ox = sx < 0 and img:getWidth() * sc or 0
-        love.graphics.draw(img, b.x + ox, b.y, 0, sx, sc)
-      end
-    end
-  end
-  for _, u in ipairs(critters.bugs) do
-    if u.kind == "firefly" then
-      -- 夜里在色罩之后再画，才亮得起来
-    elseif u.kind == "butterfly" and assets.butterfly then
-      love.graphics.setColor(1, 1, 1, 1)
-      local img = assets.butterfly[(math.floor(u.t * 8) % 2) + 1]
-      if img then love.graphics.draw(img, u.x, u.y, 0, 2, 2) end
-    elseif u.kind == "dragonfly" and assets.dragonfly then
-      love.graphics.setColor(1, 1, 1, 1)
-      love.graphics.draw(assets.dragonfly, u.x, u.y, 0, 2, 2)
-    end
-  end
-  love.graphics.setColor(1, 1, 1, 1)
-end
-
-spawnMeteor = function()
-  nightFX.meteors[#nightFX.meteors + 1] = {
-    x = love.math.random(20, 260), y = love.math.random(8, 36),
-    vx = 110 + love.math.random() * 40, vy = 48 + love.math.random() * 20,
-    t = 0, life = 0.55 + love.math.random() * 0.25
-  }
-end
-
-spawnLeaf = function()
-  local night = isNight()
-  nightFX.leaves[#nightFX.leaves + 1] = {
-    x = love.math.random(-10, TOP_W), y = love.math.random(-8, 40),
-    vx = (night and 28 or 16) + love.math.random() * 18,
-    vy = 12 + love.math.random() * 16,
-    t = 0, life = 3.2 + love.math.random() * 2,
-    kind = love.math.random(0, 2)
-  }
-end
-
-updateNight = function(dt)
-  nightFX.leafT = nightFX.leafT - dt
-  if nightFX.leafT <= 0 then
-    nightFX.leafT = (isNight() and 0.35 or 0.9) + love.math.random() * 0.5
-    if scene == "play" then spawnLeaf() end
-  end
-  nightFX.meteorT = nightFX.meteorT - dt
-  if nightFX.meteorT <= 0 then
-    nightFX.meteorT = 6 + love.math.random() * 8
-    if scene == "play" and isNight() then spawnMeteor() end
-  end
-  for i = #nightFX.meteors, 1, -1 do
-    local m = nightFX.meteors[i]
-    m.t = m.t + dt
-    m.x = m.x + m.vx * dt
-    m.y = m.y + m.vy * dt
-    if m.t >= m.life then table.remove(nightFX.meteors, i) end
-  end
-  for i = #nightFX.leaves, 1, -1 do
-    local lf = nightFX.leaves[i]
-    lf.t = lf.t + dt
-    lf.x = lf.x + lf.vx * dt
-    lf.y = lf.y + lf.vy * dt + math.sin(lf.t * 5) * 8 * dt
-    if lf.t >= lf.life or lf.y > TOP_H + 8 then table.remove(nightFX.leaves, i) end
-  end
-end
-
-drawNightSky = function()
-  if staticPlayFx then return end
-  local a = starAlpha()
-  if a > 0 then
-    for _, st in ipairs(nightFX.stars) do
-      local tw = 0.35 + 0.65 * (0.5 + 0.5 * math.sin(titlePulse * 2.2 + st.p))
-      love.graphics.setColor(1, 0.96, 0.78, a * tw)
-      love.graphics.rectangle("fill", st.x, st.y, st.s, st.s)
-      if st.plus then
-        love.graphics.setColor(1, 0.96, 0.78, a * tw * 0.55)
-        love.graphics.rectangle("fill", st.x - 1, st.y, 1, st.s)
-        love.graphics.rectangle("fill", st.x + st.s, st.y, 1, st.s)
-        love.graphics.rectangle("fill", st.x, st.y - 1, st.s, 1)
-        love.graphics.rectangle("fill", st.x, st.y + st.s, st.s, 1)
-      end
-    end
-    for _, m in ipairs(nightFX.meteors) do
-      local fade = 1 - m.t / m.life
-      for i = 0, 6 do
-        love.graphics.setColor(1, 0.93, 0.7, fade * (1 - i * 0.12))
-        love.graphics.rectangle("fill", m.x - i * 3, m.y - i * 1, 3, 1)
-      end
-      love.graphics.setColor(1, 1, 0.9, fade)
-      love.graphics.rectangle("fill", m.x, m.y, 2, 2)
-    end
-  end
-  -- 萤火虫：色罩之后画硬像素亮点，不跟模糊光晕
-  if isNight() then
-    for _, u in ipairs(critters.bugs) do
-      if u.kind == "firefly" then
-        local blink = 0.35 + 0.65 * (0.5 + 0.5 * math.sin(u.t * 7))
-        local x, y = math.floor(u.x + 0.5), math.floor(u.y + 0.5)
-        love.graphics.setColor(1, 0.92, 0.45, blink * 0.35)
-        love.graphics.rectangle("fill", x - 1, y, 4, 2)
-        love.graphics.rectangle("fill", x, y - 1, 2, 4)
-        love.graphics.setColor(1, 0.98, 0.62, blink)
-        love.graphics.rectangle("fill", x, y, 2, 2)
-      end
-    end
-  end
-  -- 落叶：硬像素小块，风从左往右
-  for _, lf in ipairs(nightFX.leaves) do
-    if isNight() then
-      love.graphics.setColor(0.42, 0.38, 0.18, 0.9)
-    else
-      love.graphics.setColor(0.48, 0.62, 0.22, 0.9)
-    end
-    local wob = math.floor(math.sin(lf.t * 6) + 0.5)
-    if lf.kind == 0 then
-      love.graphics.rectangle("fill", lf.x, lf.y + wob, 3, 2)
-    elseif lf.kind == 1 then
-      love.graphics.rectangle("fill", lf.x, lf.y + wob, 2, 3)
-    else
-      love.graphics.rectangle("fill", lf.x + wob, lf.y, 3, 2)
-      love.graphics.rectangle("fill", lf.x + 1, lf.y + 1 + wob, 2, 1)
-    end
-  end
-  love.graphics.setColor(1, 1, 1, 1)
-end
-
-local function drawPlayerAt(px, py)
+function drawPlayerAt(px, py)
   drawDropShadow(px, py, "sm")
   love.graphics.setColor(1, 1, 1, 1)
   local walk = ensureWalk(player.castId)
@@ -2293,7 +1408,7 @@ local function drawPlayerAt(px, py)
       return
     end
   end
-  local img = assets.player
+  local img = Assets.get().player
   if img then
     local iw, ih = img:getWidth(), img:getHeight()
     local sc = 28 / ih
@@ -2301,29 +1416,30 @@ local function drawPlayerAt(px, py)
   end
 end
 
-local function drawWorldFx()
-  if brewActive and assets.brewKit then
+function drawWorldFx()
+  if brewActive and Assets.get().brewKit then
     local bx, by = brewX * TILE, brewY * TILE
     love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.draw(assets.brewKit, bx + 2, by + TILE - assets.brewKit:getHeight())
-    if assets.steam then
+    love.graphics.draw(Assets.get().brewKit, bx + 2, by + TILE - Assets.get().brewKit:getHeight())
+    if Assets.get().steam then
       local fi = math.floor(waterPhase) % 3
-      local st = assets.steam[fi + 1]
+      local st = Assets.get().steam[fi + 1]
       if st then love.graphics.draw(st, bx + 4, by - 6) end
     end
   end
   if potSimmer > 0 then
+    local firepit = CampMap.getFirepit()
     love.graphics.setColor(1, 1, 1, 0.5 + 0.3 * math.sin(waterPhase * 4))
     love.graphics.circle("fill", firepit.x * TILE + 8, firepit.y * TILE, 4)
   end
 end
 
-local function drawRitualOverlay()
+function drawRitualOverlay()
   if not ritual then return end
   if ritual.kind == "drip" then
     love.graphics.setColor(0, 0, 0, 0.45)
   love.graphics.rectangle("fill", 0, 0, TOP_W, TOP_H)
-    local img = assets.ritual and assets.ritual.drip and assets.ritual.drip[ritual.step]
+    local img = Assets.get().ritual and Assets.get().ritual.drip and Assets.get().ritual.drip[ritual.step]
     if img then
       love.graphics.setColor(1, 1, 1, 1)
       local srcW, srcH = 120, 76
@@ -2343,7 +1459,7 @@ local function drawRitualOverlay()
   if ritual.kind == "rod" or ritual.kind == "fan" then
     love.graphics.setColor(0, 0, 0, 0.35)
     love.graphics.rectangle("fill", 0, 0, TOP_W, TOP_H)
-    local frames = ritual.kind == "rod" and assets.ritual.fishAnim or assets.ritual.fanAnim
+    local frames = ritual.kind == "rod" and Assets.get().ritual.fishAnim or Assets.get().ritual.fanAnim
     local img = frames and frames[ritual.step]
     if img then
       love.graphics.setColor(1, 1, 1, 1)
@@ -2360,64 +1476,11 @@ local function drawRitualOverlay()
   end
 end
 
-local function drawPlayTop()
-  ensureCamp()
-  if uiFont then love.graphics.setFont(uiFont) end
-  love.graphics.setColor(0.15, 0.18, 0.14)
-  love.graphics.rectangle("fill", 0, 0, TOP_W, TOP_H)
-  local cols, rows = TOP_W / TILE, TOP_H / TILE
-  if campGroundCanvas then
-    love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.draw(campGroundCanvas, 0, 0)
-  else
-    drawCampGroundLayer(cols, rows)
-  end
-  for y = 0, rows - 1 do
-    if y == firepit.y and assets.firepit then
-      drawDropShadow(firepit.x * TILE, firepit.y * TILE, "sm")
-      love.graphics.setColor(1, 1, 1, 1)
-      love.graphics.draw(assets.firepit, firepit.x * TILE, firepit.y * TILE + TILE - assets.firepit:getHeight())
-      if lanternOn and not staticPlayFx then
-        love.graphics.setColor(1, 0.85, 0.4, 0.35)
-        love.graphics.circle("fill", firepit.x * TILE + 8, firepit.y * TILE + 4, 22)
-      end
-    end
-    if y == player.y then drawPlayerAt(player.x * TILE, player.y * TILE) end
-    for _, s in ipairs(propRows[y] or {}) do
-      drawProp(s.t, s.x * TILE, s.y * TILE, s.x, s.y)
-    end
-  end
-
-  if not staticPlayFx then
-    drawFish()
-    drawCritters()
-    drawWorldFx()
-  end
-
-
-  -- time tint
-  local tint = timeTint[timeIndex] or timeTint[3]
-  love.graphics.setColor(tint[1], tint[2], tint[3], tint[4])
-  love.graphics.rectangle("fill", 0, 0, TOP_W, TOP_H)
-  drawNightSky()
-
-  local title = "露营 · " .. timeLabel()
-  if tentOpen then title = title .. " · 帐" end
-  if lanternOn then title = title .. " · 灯" end
-  local tw = uiFont and uiFont:getWidth(title) or 80
-  love.graphics.setColor(0.08, 0.08, 0.08, 0.85)
-  love.graphics.rectangle("fill", 4, 4, tw + 10, 16)
-  love.graphics.setColor(1, 0.95, 0.8)
-  love.graphics.print(title, 8, 5)
-  drawRitualOverlay()
-  drawToast()
-end
-
 local function drawPlayBottom()
   if uiFont then love.graphics.setFont(uiFont) end
-  if assets.packBg then
+  if Assets.get().packBg then
     love.graphics.setColor(1, 1, 1, 1)
-    drawFitted(assets.packBg, 0, 0, BOT_W, BOT_H)
+    drawFitted(Assets.get().packBg, 0, 0, BOT_W, BOT_H)
   else
     love.graphics.setColor(0.93, 0.88, 0.76)
     love.graphics.rectangle("fill", 0, 0, BOT_W, BOT_H)
@@ -2453,6 +1516,37 @@ local function drawPlayBottom()
     love.graphics.rectangle("fill", 100, 210, 120, 22)
     love.graphics.setColor(1, 1, 1)
     love.graphics.print("A 跳过", 132, 213)
+    return
+  end
+
+  if cupPick then
+    love.graphics.setColor(0.32, 0.22, 0.14)
+    love.graphics.rectangle("fill", 6, 6, BOT_W - 12, 28)
+    love.graphics.setColor(1, 0.96, 0.88)
+    love.graphics.print("选杯子 · 方向键 · A 喝", 14, 12)
+    local a = Assets.get()
+    for i, st in ipairs(AP.CUP_STYLES) do
+      local x, y, w, h = cupSlotRect(i)
+      local on = (i == cupStyle)
+      love.graphics.setColor(on and 0.98 or 0.95, on and 0.9 or 0.92, on and 0.55 or 0.84)
+      love.graphics.rectangle("fill", x, y, w, h)
+      love.graphics.setColor(0.3, 0.2, 0.12)
+      love.graphics.rectangle("line", x, y, w, h)
+      local icon = a.cupIcons and a.cupIcons[i]
+      if icon then
+        love.graphics.setColor(1, 1, 1, 1)
+        local iw, ih = icon:getWidth(), icon:getHeight()
+        local s = math.min((w - 8) / iw, 28 / ih)
+        love.graphics.draw(icon, x + (w - iw * s) / 2, y + 4, 0, s, s)
+      end
+      love.graphics.setColor(0.2, 0.14, 0.08)
+      local nw = uiFont and uiFont:getWidth(st.name) or 40
+      love.graphics.print(st.name, x + (w - nw) / 2, y + h - 14)
+    end
+    love.graphics.setColor(0.35, 0.55, 0.35)
+    love.graphics.rectangle("fill", 100, 210, 120, 22)
+    love.graphics.setColor(1, 1, 1)
+    love.graphics.print("A 喝一口", 128, 213)
     return
   end
 
@@ -2544,3 +1638,5 @@ function love.draw(screen)
     love.graphics.draw(desktopBottom, 40, TOP_H)
   end
 end
+
+bindCampModules()

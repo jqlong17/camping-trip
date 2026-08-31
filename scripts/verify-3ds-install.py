@@ -78,10 +78,12 @@ def check_lua() -> None:
         log("FAIL", "main.lua 找不到 loadAssets()")
         return
 
-    title_pos = load.find('loadImage("assets/title_top.png")')
+    title_pos = load.find('AP.ui("title_top.png")')
+    if title_pos < 0:
+        title_pos = load.find("title_top")
     grass_pos = load.find("tile_grass")
     if title_pos < 0:
-        log("FAIL", "loadAssets 没有先加载 title_top.png")
+        log("FAIL", "loadAssets 没有先加载 title_top")
     elif grass_pos >= 0 and title_pos > grass_pos:
         log("FAIL", "title_top 必须在地砖之前加载")
     else:
@@ -126,12 +128,25 @@ def check_lua() -> None:
         log("FAIL", "loadImage 的 setFilter 必须 pcall（LovePotion 可能没有）")
 
     sfx = extract_fn(src, "playSfx")
-    if "isConsole" in sfx and "setPitch" not in sfx.split("if isConsole")[1].split("end")[0]:
+    audio_src = (ROOT / "game" / "audio.lua").read_text(encoding="utf-8")
+    play_sfx = audio_src if audio_src else sfx
+    if "isConsole" in play_sfx and "setPitch" not in play_sfx.split("if isConsole")[1].split("end")[0]:
         log("OK", "真机 playSfx 不走 clone/setPitch")
-    elif "pcall" in sfx and "setPitch" in sfx:
+    elif "pcall" in play_sfx and "setPitch" in play_sfx:
         log("WARN", "playSfx 仍可能在真机上 clone/setPitch")
     else:
         log("FAIL", "playSfx 缺少真机保护")
+
+    amb_3ds = GAME / "audio" / "3ds" / "amb_creek.mp3"
+    if amb_3ds.is_file() and amb_3ds.stat().st_size > 10_000:
+        log("OK", "真机溪水环境音 audio/3ds/amb_creek.mp3")
+    else:
+        log("FAIL", "缺少 game/audio/3ds/amb_creek.mp3（DEV-069 近水溪水）")
+
+    if "console_prox_amb_bgm_switch" in audio_src:
+        log("OK", "audio.lua 真机模式 console_prox_amb_bgm_switch")
+    else:
+        log("FAIL", "audio.lua 未设 console_prox_amb_bgm_switch")
 
     deploy = DEPLOY.read_text(encoding="utf-8")
     if "COPYFILE_DISABLE" in deploy and "._*" in deploy:
@@ -143,7 +158,9 @@ def check_lua() -> None:
     else:
         log("FAIL", "deploy 必须先生成 camp_static_base，再转换 T3X")
 
-    if re.search(r'loadImage\("assets/story/', load):
+    if re.search(r'AP\.story\(', load):
+        log("OK", "分镜走 asset_paths.story()")
+    elif re.search(r'loadImage\("assets/story/', load):
         log("FAIL", "loadAssets 仍一次性加载分镜（应走 ensureStory）")
     else:
         log("OK", "分镜未在启动时全量加载")
@@ -200,13 +217,15 @@ def check_pngs() -> None:
         return
 
     required = [
-        GAME / "assets" / "title_top.png",
-        GAME / "assets" / "title_bot.png",
-        GAME / "assets" / "ui_pack_bg.png",
-        GAME / "assets" / "camp_static_base.png",
+        GAME / "assets" / "ui" / "title_top.png",
+        GAME / "assets" / "ui" / "title_bot.png",
+        GAME / "assets" / "ui" / "ui_pack_bg.png",
+        GAME / "assets" / "scenes" / "forest" / "camp" / "camp_static_base.png",
     ]
-    for key in ("p1", "p2", "p3", "d1", "d2", "h1"):
-        required.append(GAME / "assets" / "story" / f"{key}.png")
+    for key in ("p1", "p2", "p3", "d1", "d2"):
+        required.append(GAME / "assets" / "scenes" / "forest" / "story" / f"{key}.png")
+    for key in ("h1",):
+        required.append(GAME / "assets" / "scenes" / "home" / "story" / f"{key}.png")
 
     for path in required:
         if not path.is_file():
@@ -246,8 +265,8 @@ def check_romfs() -> None:
 def check_dist() -> None:
     cia = DIST / CIA_NAME
     tdsx = DIST / f"{HB_NAME}.3dsx"
-    title = DIST / "game" / "assets" / "title_top.png"
-    camp = DIST / "game" / "assets" / "camp_static_base.t3x"
+    title = DIST / "game" / "assets" / "ui" / "title_top.png"
+    camp = DIST / "game" / "assets" / "scenes" / "forest" / "camp" / "camp_static_base.t3x"
     if tdsx.is_file() and tdsx.stat().st_size > 100_000:
         log("OK", f"dist 3dsx {(tdsx.stat().st_size / 1e6):.1f} MB")
     else:
@@ -284,7 +303,7 @@ def check_sd(require: bool) -> None:
     else:
         log("FAIL", f"卡上缺少 3ds/{HB_NAME} 的 3dsx 或 game/main.lua")
 
-    title = hb / "game" / "assets" / "title_top.png"
+    title = hb / "game" / "assets" / "ui" / "title_top.png"
     if title.is_file():
         log("OK", "卡上有标题图 title_top.png")
     else:
@@ -294,7 +313,7 @@ def check_sd(require: bool) -> None:
         log("OK", "卡上有真机纹理 title_top.t3x")
     else:
         log("FAIL", "卡上缺 title_top.t3x；PNG 在真机不会被直接加载")
-    camp = hb / "game" / "assets" / "camp_static_base.t3x"
+    camp = hb / "game" / "assets" / "scenes" / "forest" / "camp" / "camp_static_base.t3x"
     if camp.is_file() and camp.stat().st_size > 32:
         log("OK", "卡上有营地静态底图 camp_static_base.t3x")
     else:

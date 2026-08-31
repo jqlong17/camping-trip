@@ -3,7 +3,9 @@
 from pathlib import Path
 from PIL import Image
 
-OUT = Path("/Users/ruska/projects/3ds/linjian/game/assets/world")
+from asset_layout import FOREST_WORLD
+
+OUT = FOREST_WORLD
 OUT.mkdir(parents=True, exist_ok=True)
 
 

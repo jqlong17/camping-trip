@@ -44,11 +44,17 @@ love game --playtest
 
 ## 新图管线
 
-**玩法贴图 / 图标 / 特写**（营地、装备、仪式）：
+**玩法贴图 / 图标 / 特写**（营地、装备、仪式、杯子、选参 UI）：
 
-- 用脚本逐像素画，或从已通过审计的像素稿切。
-- 参考色：草地 `(78,148,42)`、泥地 `(166,124,62)`、溪水 `(32,108,176)`、帐篷浅褐 `(214,184,120)`。
-- 现成脚本：`scripts/build-camp-tiles.py`、`scripts/build-critters.py`、`scripts/enforce-pixel-style.py`。
+1. **文生图**（`GenerateImage`，套用 `linjian-rich-gear` 的 prompt-lock）→ 原图存 `docs/promo/<name>_gen_ref.png`。
+2. **`scripts/build-*-assets.py` 只做后处理**：slice、NEAREST 缩放、限色、透明裁边——**禁止**用 `ImageDraw` / 逐像素 `put()` 从零画主体。
+3. `python3 scripts/audit-pixel-style.py` → 0 fail 后进 `game/assets/`。
+
+参考色（限色/审计对照，不是程序填色依据）：草地 `(78,148,42)`、泥地 `(166,124,62)`、溪水 `(32,108,176)`、帐篷浅褐 `(214,184,120)`。
+
+**禁止默认路径**：`build-cups.py`、`build-critters.py`、`build-fish-rod-assets.py` 等 ImageDraw 脚本作为**新资源**来源。仓库里遗留的程序图见 `linjian-rich-gear` §「待文生图替换」——重做时必须走 gen。
+
+**例外**（须在 SPEC 写明，且不得替代装备/仪式/角色）：`build-camp-static-base.py` 拼已有 tile；T3X/音频生成；从**已通过审计的**手绘像素稿导入（仍须 promo 或 docs 可追溯）。
 
 **标题 / 分镜全屏**：
 
@@ -65,7 +71,7 @@ love game --playtest
 - 全屏又 **太平滑**（邻域色差很低）→ FAIL
 - 小精灵 unique **>56** → WARN（抗锯齿脏边）
 
-修法：跑 `python3 scripts/enforce-pixel-style.py`，或手绘替换，再审计。
+修法：**文生图重做**或从 `docs/promo/` 切硬像素替换；`enforce-pixel-style.py` 仅作旧图应急量化，不得作为新资源来源。
 
 ## 不要做
 

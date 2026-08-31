@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Build a precomposed static camp ground layer for 3DS runtime."""
+"""Build a precomposed static camp ground+props layer for 3DS runtime.
+
+Bakes grass/water/shore/decals AND trees/bushes/stones/nests so the console
+only redraws tent, firepit, player, fruit dots, and cheap creek sparkles.
+"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -7,13 +11,19 @@ from pathlib import Path
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
-ASSETS = ROOT / "game" / "assets"
-OUT = ASSETS / "camp_static_base.png"
+from asset_layout import FOREST_CAMP, SHARED, ASSETS
+
+OUT = FOREST_CAMP / "camp_static_base.png"
 TOP_W, TOP_H, TILE = 400, 240, 16
+PALETTE = 48
 
 
 def open_rgba(name: str) -> Image.Image:
-    return Image.open(ASSETS / name).convert("RGBA")
+    for base in (FOREST_CAMP, SHARED, ASSETS):
+        path = base / name
+        if path.is_file():
+            return Image.open(path).convert("RGBA")
+    raise FileNotFoundError(name)
 
 
 def paste(dst: Image.Image, src: Image.Image | None, x: int, y: int) -> None:
@@ -22,10 +32,23 @@ def paste(dst: Image.Image, src: Image.Image | None, x: int, y: int) -> None:
     dst.alpha_composite(src, (int(x), int(y)))
 
 
+def quantize_rgba(im: Image.Image, colors: int) -> Image.Image:
+    rgba = im.convert("RGBA")
+    # Only quantize the logical 400×240 playfield; keep pot padding solid.
+    play = rgba.crop((0, 0, TOP_W, TOP_H))
+    alpha = play.split()[-1]
+    rgb = play.convert("RGB").quantize(colors=colors, method=Image.Quantize.MEDIANCUT)
+    locked = rgb.convert("RGBA")
+    locked.putalpha(alpha)
+    out = Image.new("RGBA", rgba.size, (38, 46, 36, 255))
+    out.paste(locked, (0, 0))
+    return out
+
+
 def creek_center_x(y: int) -> int:
     import math
 
-    wiggle = math.floor(1.7 * math.sin(y * 0.40) + 0.7 * math.sin(y * 0.88 + 1.0))
+    wiggle = math.floor(1.4 * math.sin(y * 0.35) + 0.9 * math.sin(y * 0.72 + 0.8))
     return 17 + wiggle
 
 
@@ -42,8 +65,6 @@ def is_open_ground(t: int) -> bool:
 
 
 def build_map() -> tuple[dict[int, dict[int, int]], list[dict[str, int | str]]]:
-    import math
-
     cols, rows = TOP_W // TILE, TOP_H // TILE
     camp_map: dict[int, dict[int, int]] = {}
     decals: list[dict[str, int | str]] = []
@@ -57,6 +78,8 @@ def build_map() -> tuple[dict[int, dict[int, int]], list[dict[str, int | str]]]:
             if abs(dx) <= 1:
                 t = 2
             elif abs(dx) == 2:
+                t = 8
+            elif abs(dx) == 3 and (x + y) % 3 != 0:
                 t = 8
             camp_map[y][x] = t
 
@@ -133,17 +156,24 @@ def main() -> int:
     water = open_rgba("tile_water0.png")
     shallow = open_rgba("tile_shallow0.png")
     shore = {k: open_rgba(f"shore_{k}.png") for k in ["E", "W", "N", "S", "SE", "NE", "NW", "SW"]}
+    fringe = {k: open_rgba(f"dirt_fringe_{k}.png") for k in ["N", "S", "E", "W"]}
     flowers = [open_rgba(f"prop_flower{i}.png") for i in range(4)]
     stones = [open_rgba(f"tile_stone{i}.png") for i in range(3)]
+    bushes = [open_rgba(f"tile_bush{i}.png") for i in range(3)]
+    trees = [open_rgba(f"tile_tree{i}.png") for i in range(12)]
     reed = open_rgba("prop_reed.png")
     log = open_rgba("prop_log.png")
     stump = open_rgba("prop_stump.png")
     shadow_sm = open_rgba("prop_shadow_sm.png")
+    shadow_tree = open_rgba("prop_shadow_tree.png")
+    nest = open_rgba("world/nest.png")
     pier = open_rgba("prop_pier.png")
     out = Image.new("RGBA", (512, 256), (38, 46, 36, 255))
 
     def tile_at(tx: int, ty: int) -> int | None:
         return camp_map.get(ty, {}).get(tx)
+
+    nest_keys = {(int(d["x"]), int(d["y"])) for d in decals if d["kind"] == "nest"}
 
     for y in range(TOP_H // TILE):
         for x in range(TOP_W // TILE):
@@ -155,8 +185,19 @@ def main() -> int:
                 if not is_water(tile_at(x - 1, y)): paste(out, shore["W"], px, py)
                 if not is_water(tile_at(x, y - 1)): paste(out, shore["N"], px, py)
                 if not is_water(tile_at(x, y + 1)): paste(out, shore["S"], px, py)
-            elif t == 7:
+            elif t == 7 or t == 5:
+                # Tent starts as dirt pad in the baked layer; runtime draws the tent sprite.
                 paste(out, dirt[(x * 3 + y * 5) % 4], px, py)
+                n, s = tile_at(x, y - 1), tile_at(x, y + 1)
+                e, w = tile_at(x + 1, y), tile_at(x - 1, y)
+                if n in (0, 1):
+                    paste(out, fringe["N"], px, py)
+                if s in (0, 1):
+                    paste(out, fringe["S"], px, py)
+                if e in (0, 1):
+                    paste(out, fringe["E"], px, py)
+                if w in (0, 1):
+                    paste(out, fringe["W"], px, py)
             else:
                 paste(out, grass[(x * 17 + y * 31) % 8], px, py)
                 e, w, n, s = is_water(tile_at(x + 1, y)), is_water(tile_at(x - 1, y)), is_water(tile_at(x, y - 1)), is_water(tile_at(x, y + 1))
@@ -187,10 +228,27 @@ def main() -> int:
                 paste(out, stones[v % 3], px + 2, py + 6)
             elif kind == "pier":
                 paste(out, pier, px + TILE - pier.width + 4, py + 4)
+            elif kind == "tree":
+                tree = trees[v % 12]
+                paste(out, shadow_tree, px + TILE // 2 - shadow_tree.width // 2 + 5, py + TILE - shadow_tree.height + 3)
+                paste(out, tree, px + (TILE - tree.width) // 2, py + TILE - tree.height)
+                if (int(d["x"]), int(d["y"])) in nest_keys:
+                    paste(out, nest, px + (TILE - nest.width) // 2 + 2, py - 4)
+            elif kind == "bush":
+                bush = bushes[v % 3]
+                paste(out, shadow_sm, px + TILE // 2 - shadow_sm.width // 2 + 3, py + TILE - shadow_sm.height + 2)
+                paste(out, bush, px + (TILE - bush.width) // 2, py + TILE - bush.height)
+            elif kind == "stone":
+                stone = stones[v % 3]
+                paste(out, shadow_sm, px + TILE // 2 - shadow_sm.width // 2 + 3, py + TILE - shadow_sm.height + 2)
+                paste(out, stone, px, py + TILE - stone.height)
 
+    out = quantize_rgba(out, PALETTE)
     OUT.parent.mkdir(parents=True, exist_ok=True)
     out.save(OUT)
-    print(f"camp static base: {OUT} {out.size}")
+    play = out.crop((0, 0, TOP_W, TOP_H))
+    unique = len({c[:3] for c in play.getdata() if c[3] > 16})
+    print(f"camp static base: {OUT} {out.size} palette={PALETTE} unique={unique}")
     return 0
 
 

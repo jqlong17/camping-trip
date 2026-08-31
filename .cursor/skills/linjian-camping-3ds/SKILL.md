@@ -18,7 +18,8 @@ disable-model-invocation: false
 2. [docs/动画与交互-SPEC.md](docs/动画与交互-SPEC.md) — 四向精灵 / 道具仪式
 3. [项目背景.md](项目背景.md) — 真机踩坑
 4. [docs/怎么玩.md](docs/怎么玩.md) — 操作与自测
-5. `linjian-pixel-style` — 运行时 PNG 必须是 16-bit 硬像素
+5. `linjian-pixel-style` — 运行时 PNG 必须是 16-bit 硬像素  
+6. `linjian-rich-gear` — 新装备/仪式保持手冲级丰富度 + 文生图风格锁（帐篷/灯/登山等）
 
 仓库根：`/Users/ruska/projects/3ds/linjian`
 
@@ -37,10 +38,12 @@ disable-model-invocation: false
 ## 整局流程（不可跳过场景）
 
 ```
-title → prologue → cast → depart → play → homecoming → title
+title → prologue → cast(仅首次) → depart → play → homecoming → diary → title
 ```
 
-`startJourney()` 必须进 `prologue`，禁止直跳营地。
+`startJourney()` 必须进 `prologue`，禁止直跳营地。  
+已有存档角色时跳过 `cast`；标题「切换角色」可改人。  
+回家后进 `diary` 写日记并写入 `save.json`（累计露营次数 / 果 / 鱼种 / 咖啡）。
 
 ## 资源位置
 
@@ -102,6 +105,9 @@ title → prologue → cast → depart → play → homecoming → title
 - **禁止**把 CIA 放进 `sd:/3ds/CampingTrip/`（hbmenu 二次进入会 data abort）；CIA 只放 `cias/CampingTrip.cia`
 - 玩家可见名称不要再用拼音 `linjian`
 - 大图/分镜/走表按需加载；全屏 PNG 先 pad 到 2 的幂（`scripts/pad-pot-textures.py`）
+- 营地资源不要集中在 `goPlay()` / 按 A 回调里同步加载；当前用 `camp_preload` 在出发分镜期间按帧预热，避免「到了。先安顿下来吧。」之后黑屏式等待。真机日志应有 `camp_preload_begin reason=depart` 与 `ensureCamp done ... steps=20`
+- 当前玩法节奏：咖啡一壶最多三口；夜里靠近篝火按 A 点火；时间自动推进，R/right shoulder 快进到下一天；右上角显示 `D? 时段`。X 不再是时间推进主路径
+- 3DS 可保留轻量鱼鸟虫：`critterFx` 独立于静态底图，真机 `static_play_fx` 仍加载鱼跃、小鸟、蝴蝶/蜻蜓/萤火虫。若再次卡顿，先减少 spawn/关闭 critterFx，不要回退离线底图和营地预热
 - LovePotion 3DS **没有** `Source:setPitch`（桌面 LÖVE 有）。真机 `playSfx` **不要 clone/setPitch/stop**。另外 `Source:stop()` 在 LovePotion 3DS 是高风险调用：公开 issue 记录了对未播放 Source 调用 `stop()` 会锁机，以及停止 stream 音乐会冻结游戏；真机短音效采用“正在播放则跳过、未播放则直接 `play`”策略。详见 [LovePotion #226](https://github.com/lovebrew/lovepotion/issues/226)、[#237](https://github.com/lovebrew/lovepotion/issues/237)、[#240](https://github.com/lovebrew/lovepotion/issues/240)、[#249](https://github.com/lovebrew/lovepotion/issues/249)。菜单一动红屏是旧坑；后半程 `3dsx_app` data abort 也可能是 clone 写坏指针
 - **CampingTrip CIA 已停用**：本机确认 Title `00040000004C4A00` 可让 HOME 菜单在 Luma 后黑屏。恢复：GodMode9 2.2.3（START 开机）→ HOME → Title manager → `[A:] SYSNAND SD` → 该 ID → Manage title → Uninstall title。日常只跑 `3ds/CampingTrip/CampingTrip.3dsx`；deploy 默认不得打包或复制旧 CIA。
 - **Titles 删了但桌面还是旧图标**：Homemenu 缓存，不是没删掉。须 **完全关机再开机**；装新 CIA 后再关一次机。系统设置 → 数据管理 → 3DS 软件 看一眼也会刷新。不要指望删完立刻变。

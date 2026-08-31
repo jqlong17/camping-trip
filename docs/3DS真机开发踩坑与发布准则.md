@@ -212,6 +212,7 @@ sdmc/3ds/CampingTrip/game/assets/...
 4. 电脑端 benchmark 只能验证流程与相对负载；即使桌面端 100 FPS，也不能推翻实体 3DS 的低帧日志。
 5. 性能报告必须同时记录 `camp_load` 时长和 `perf scene=play`，区分首次资源加载卡顿与进入营地后的持续低帧。
 6. 如果 `static_play_fx/console_single_stream_no_stop` 下仍约 4 FPS，主因不再优先怀疑风效或音频切换，而应先压缩营地每帧绘制：避免每帧创建排序表、避免逐行反复扫描全部 decal、减少不显示资源的首次加载。当前真机静态模式已改用 `assets/camp_static_base.png/.t3x` 离线预合成地面/水岸/小装饰，只保留树、灌木、帐篷、营火、玩家等少量前景逐帧绘制。
+7. “按 A 后等很久才进营地”要和“进入营地后持续低帧”分开判断。前者通常是 `ensureCamp()` 首次 T3X/SD 读取和纹理创建集中在按键回调里；当前代码用 `camp_preload` 在 `depart` 分镜期间分帧预热，日志应出现 `camp_preload_begin reason=depart` 和 `steps=20`。
 
 ### 3.7 自制 CIA 导致 HOME Menu 黑屏
 

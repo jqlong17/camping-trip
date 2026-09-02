@@ -10,3 +10,4 @@ __pycache__/
 .DS_Store
 tools/story-atlas/node_modules/
 tools/story-atlas/dist/
+dist/3ds/**/*.cia

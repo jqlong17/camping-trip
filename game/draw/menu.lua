@@ -44,9 +44,6 @@ function MenuDraw.titleBottom()
   if Assets.get().titleBot then Assets.drawFitted(Assets.get().titleBot, 0, 0, R.BOT_W, R.BOT_H)
   else love.graphics.setColor(0.85, 0.75, 0.55); love.graphics.rectangle("fill", 0, 0, R.BOT_W, R.BOT_H) end
   if R.uiFont then love.graphics.setFont(R.uiFont) end
-  -- 盖住底图口号条，菜单整体上移，给底部留边距
-  love.graphics.setColor(0.93, 0.88, 0.74, 1)
-  love.graphics.rectangle("fill", 36, 18, R.BOT_W - 72, 22)
   local x0, width = 40, R.BOT_W - 80
   local y0, stride = 36, 36
   for i, item in ipairs(State.menu.items) do
@@ -82,7 +79,11 @@ function MenuDraw.codexTop()
   if gear then
     love.graphics.setColor(0.78, 0.68, 0.42)
     love.graphics.print(gear.tag or "", 330, 30)
-    if gear.icon then
+    local preview = Assets.ensureCodexPreview and Assets.ensureCodexPreview(gear.id)
+    if preview then
+      love.graphics.setColor(1, 1, 1, 1)
+      Assets.drawFitted(preview, math.floor((R.TOP_W - 160) / 2), 42, 320, 180, 0.5, 0.5)
+    elseif gear.icon then
       local iw, ih = gear.icon:getWidth(), gear.icon:getHeight()
       local scale = math.max(2, math.min(3, math.floor(64 / math.max(iw, ih, 1))))
       love.graphics.setColor(1, 1, 1, 1)

@@ -13,6 +13,7 @@ function Draw.top()
     local beat = Story.prologue.beats[Story.prologue.i]
     StoryDraw.storyTop(beat.img, beat.line)
   elseif R.scene == "cast" then StoryDraw.castTop()
+  elseif R.scene == "destination" then StoryDraw.destinationTop()
   elseif R.scene == "depart" then
     local beat = Story.depart.beats[Story.depart.i]
     StoryDraw.storyTop(beat.img, beat.line)
@@ -21,6 +22,7 @@ function Draw.top()
     StoryDraw.storyTop(beat.img, beat.line)
   elseif R.scene == "diary" then StoryDraw.diaryTop()
   else CampRender.drawPlayTop() end
+  MenuDraw.quitConfirmTop()
 end
 
 function Draw.bottom()
@@ -29,10 +31,12 @@ function Draw.bottom()
   elseif R.scene == "about" then MenuDraw.aboutBottom()
   elseif R.scene == "prologue" then StoryDraw.storyBottom("按 A 继续故事")
   elseif R.scene == "cast" then StoryDraw.castBottom()
+  elseif R.scene == "destination" then StoryDraw.destinationBottom()
   elseif R.scene == "depart" then StoryDraw.storyBottom("按 A 前往营地")
   elseif R.scene == "homecoming" then StoryDraw.storyBottom("按 A 前往日记")
   elseif R.scene == "diary" then StoryDraw.diaryBottom()
   else PlayDraw.bottom() end
+  MenuDraw.quitConfirmBottom()
 end
 
 function Draw.frame(screen)

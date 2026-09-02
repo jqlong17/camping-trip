@@ -4,6 +4,17 @@
 > 关联：**DEV-069**（本 SPEC）· **DEV-068c**（架构重构中的 `audio.lua` 落地）  
 > 读者：正在做模块化的 Agent；**先读本文再改 `game/audio.lua`**，勿与营地渲染同一轮混改。
 
+## 0. 2026-09-02 真机安全修订（DEV-116）
+
+- 海边真机出现“音频先停止、输入与 HOME 随后全部无响应”的系统级硬卡死；没有对应
+  Lua traceback，故不能按普通脚本异常处理。
+- 真机海浪禁止再使用循环 MP3 stream；改为 12 秒、22050Hz mono PCM WAV，以
+  `static` Source 循环。桌面继续使用完整 45 秒 OGG。
+- `syncAmbient()` 固定每 0.75 秒最多执行一次；真机维护逻辑播放状态，只在 Source、
+  播放/停止状态或目标音量变化时调用音频 API，禁止每帧 `isPlaying/setVolume`。
+- 五秒性能心跳必须记录 `scene / destination / audio logical state`；营地预载必须逐步
+  记录耗时，以便强制关机后从最后一条成功事件定位阻塞边界。
+
 ---
 
 ## 1. 目标（用户拍板）
@@ -308,7 +319,17 @@ cd /Users/ruska/projects/3ds/linjian && love game --playtest
 
 ---
 
-## 9. 开发日志占位
+## 9. 海边 Destination Pack 环境音
+
+- `forest.audio.water = "creek"`：真机仅近水播放；桌面远处保留轻垫。
+- `coast.audio.water = "ocean"`：全海边营地低音量循环，靠近潮线增强。
+- 同时最多播放一种 water ambience；切换目的地时停止非当前音源。
+- 海浪母带为 45 秒首尾交叉拼接循环；桌面
+  `amb_ocean_waves.ogg`，真机 `audio/3ds/amb_ocean_waves.mp3`。
+
+---
+
+## 10. 开发日志占位
 
 | 编号 | 状态 | 摘要 |
 |------|------|------|
@@ -319,7 +340,7 @@ cd /Users/ruska/projects/3ds/linjian && love game --playtest
 
 ---
 
-## 10. 风险与回退
+## 11. 风险与回退
 
 | 风险 | 回退 |
 |------|------|

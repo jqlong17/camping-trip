@@ -6,7 +6,7 @@ local Runtime = {
   BOT_W = 320,
   BOT_H = 240,
   TILE = 16,
-  buildId = "2026-08-31-dev071-p7-p8",
+  buildId = "2026-09-02-destination-pack-coast",
 }
 
 Runtime.isConsole = love.system.getOS() == "Horizon" or love.system.getOS() == "3DS"
@@ -17,6 +17,10 @@ Runtime.cheapWindFx = Runtime.isConsole or not Runtime.staticPlayFx
 Runtime.critterFx = (not Runtime.staticPlayFx) or Runtime.isConsole or os.getenv("LINJIAN_CRITTER_FX") == "1"
 
 Runtime.scene = "title"
+Runtime.destinationId = "forest"
+Runtime.quitConfirm = false
+Runtime.quitConfirmChoice = 1 -- 1=留下 2=返回标题
+Runtime.diaryPage = 1
 Runtime.titlePulse = 0
 Runtime.waterPhase = 0
 Runtime.menuIndex = 1
@@ -53,17 +57,17 @@ Runtime.perfSlowFrames = 0
 Runtime.perfMaxDt = 0
 
 Runtime.gear = {
-  { id = "tent", name = "帐篷", tag = "过夜", x = 24, y = 48,
-    lines = { "选颜色、款式、门帘再搭。", "靠近空地按 A；已搭起再按可收起。" } },
-  { id = "drip", name = "手冲", tag = "仪式", x = 120, y = 48,
+  { id = "tent", name = "帐篷", tag = "过夜", x = 24, y = 60,
+    lines = { "米白尖顶帐篷，轻便好搭。", "站在平地按 A 展开；再按一次收起。" } },
+  { id = "drip", name = "手冲", tag = "仪式", x = 120, y = 60,
     lines = { "V60 与分享壶。闷蒸、绕圈、入杯。", "营地里选中后按 A 开始三步。" } },
-  { id = "tea", name = "泡茶", tag = "仪式", x = 216, y = 48,
+  { id = "tea", name = "泡茶", tag = "仪式", x = 216, y = 60,
     lines = { "盖碗或公道杯。温杯、注水、出汤。", "营地里选中后按 A 开始泡茶。" } },
-  { id = "rod", name = "钓竿", tag = "溪边", x = 24, y = 132,
+  { id = "rod", name = "钓竿", tag = "溪边", x = 24, y = 138,
     lines = { "小溪可以趟过去。站在水边甩一竿。", "偶尔有鱼跳起来。" } },
-  { id = "cup", name = "杯子", tag = "品尝", x = 120, y = 132,
+  { id = "cup", name = "杯子", tag = "品尝", x = 120, y = 138,
     lines = { "杯型会改这一口的口感描述。", "确认后有抬杯特写。" } },
-  { id = "fan", name = "扇子", tag = "凉快", x = 216, y = 132,
+  { id = "cook", name = "做饭", tag = "开饭", x = 216, y = 138,
     lines = { "午后热了就扇一阵。", "短短四下，风就来了。" } },
 }
 

@@ -88,13 +88,22 @@ function GearPlay.bindHost(h)
     clearRitual = H.clearRitual,
     ensureRitual = H.ensureRitual,
   })
+  CookMeal.bind({
+    say = H.say,
+    playSfx = H.playSfx,
+    getRitual = H.getRitual,
+    setRitual = H.setRitual,
+    clearRitual = H.clearRitual,
+    ensureRitual = H.ensureRitual,
+    addTripMeal = H.addTripMeal,
+  })
 end
 
 function GearPlay.nearCreek()
   local px, py = H.playerXY()
   for _, d in ipairs({ {0, 0}, {1, 0}, {-1, 0}, {0, 1}, {0, -1} }) do
     local t = H.tileAt(px + d[1], py + d[2])
-    if t == 2 or t == 8 then return true end
+    if H.isWater(t) then return true end
   end
   return false
 end
@@ -123,19 +132,36 @@ end
 
 function GearPlay.setTentMap(on)
   local m = H.getMap()
-  local pos = H.getTentPos()
-  if pos and m[pos.y] and m[pos.y][pos.x] == 5 then
-    m[pos.y][pos.x] = 1
+  local function restoreGround(x, y, ground)
+    if m[y] then m[y][x] = ground or 7 end
+  end
+  -- 收起：恢复搭帐前地面（不要写成草地 1，否则留下绿方块）
+  local prev = H.getTentPos and H.getTentPos()
+  if prev and prev.x and prev.y then
+    restoreGround(prev.x, prev.y, prev.ground)
+  end
+  for y, row in pairs(m) do
+    if type(row) == "table" then
+      for x, t in pairs(row) do
+        if t == 5 then row[x] = 7 end
+      end
+    end
   end
   if on then
     local px, py = H.playerXY()
     if not H.walkable(px, py) then return false end
-    H.setTentPos(px, py)
+    if H.canPitchTent and not H.canPitchTent(px, py) then return false end
+    local ground = (m[py] and m[py][px]) or 7
+    if ground == 5 then ground = 7 end
+    H.setTentPos(px, py, ground)
     if m[py] then m[py][px] = 5 end
     H.setTentOpen(true)
   else
+    H.setTentPos(nil, nil)
     H.setTentOpen(false)
   end
+  -- 地图改了必须重建 propRows，否则帐篷不进绘制列表
+  if CampMap.indexRenderData then CampMap.indexRenderData() end
   return true
 end
 
@@ -158,11 +184,14 @@ function GearPlay.toggleTent()
 end
 
 function GearPlay.tryLightLantern()
-  if not H.nearFire() or H.getLanternOn() or Time.index() < 5 then return end
+  if H.getLanternOn() then return false end
+  if Time.index() < 5 then return false end
+  if not H.nearFire() then return false end
   H.setLanternOn(true)
   H.setCanGoHome(true)
   H.playSfx("lantern")
   H.say("点亮了露营灯 · 夜色温柔。", 3.5)
+  return true
 end
 
 function GearPlay.advanceRitual()
@@ -173,7 +202,7 @@ function GearPlay.advanceRitual()
   elseif r.kind == "rod" then FishRod.advance()
   elseif r.kind == "tent" then TentGear.advance()
   elseif r.kind == "cup_sip" then CupSip.advance()
-  elseif r.kind == "fan" then H.skipFanRitual() end
+  elseif r.kind == "cook" then CookMeal.advance() end
 end
 
 function GearPlay.nudgeRitual(dir)
@@ -183,6 +212,8 @@ function GearPlay.nudgeRitual(dir)
   elseif r.kind == "tea" then TeaBrew.nudge(dir); return true
   elseif r.kind == "rod" then FishRod.nudge(dir); return true
   elseif r.kind == "tent" then TentGear.nudge(dir); return true
+  elseif r.kind == "cup_sip" then CupSip.nudge(dir); return true
+  elseif r.kind == "cook" then CookMeal.nudge(dir); return true
   end
   return false
 end
@@ -191,6 +222,7 @@ function GearPlay.cancelRitual()
   local r = H.getRitual()
   if not r then return end
   if r.kind == "tent" then TentGear.cancel(); return end
+  if r.kind == "cook" then CookMeal.cancel(); return end
   if r.kind == "cup_sip" then H.clearRitual(); return end
   H.clearRitual()
   H.setBrewActive(false)
@@ -205,6 +237,8 @@ function GearPlay.tryUseGear()
     GearPlay.advanceRitual()
     return
   end
+  -- 入夜 + 靠近篝火：优先点火，不依赖选中哪件装备（DEV-052）
+  if GearPlay.tryLightLantern() then return end
   local g = H.getGear()[H.getSelected()]
   if not g then return end
   if g.id == "tent" then
@@ -215,15 +249,14 @@ function GearPlay.tryUseGear()
     TeaBrew.start()
   elseif g.id == "rod" then
     if GearPlay.nearCreek() then FishRod.start()
-    else H.say("去小溪边再试试。", 2.5) end
+    else H.say(Destinations.currentId() == "coast" and "去浪边再试试。" or "去小溪边再试试。", 2.5) end
   elseif g.id == "cup" then
     H.drinkFromCup()
-  elseif g.id == "fan" then
-    H.startFanRitual()
+  elseif g.id == "cook" then
+    CookMeal.start()
   else
     H.say("拿起了" .. g.name, 2)
   end
-  GearPlay.tryLightLantern()
 end
 
 function GearPlay.diaryTripLines()
@@ -232,11 +265,14 @@ function GearPlay.diaryTripLines()
   if (h.fruit or 0) > 0 then lines[#lines + 1] = "摘了 " .. h.fruit .. " 个野果。" end
   if (h.coffee or 0) > 0 then lines[#lines + 1] = "手冲咖啡 " .. h.coffee .. " 壶。" end
   if (h.tea or 0) > 0 then lines[#lines + 1] = "泡茶 " .. h.tea .. " 壶。" end
+  if (h.meals or 0) > 0 then lines[#lines + 1] = "做了 " .. h.meals .. " 顿饭。" end
   local ft = Persist.fishTotalOf(h.fish)
   if ft > 0 then lines[#lines + 1] = "钓到鱼 " .. ft .. " 条。" end
   if DripBrew.taste then lines[#lines + 1] = "咖啡：" .. DripBrew.taste end
   if TeaBrew.taste then lines[#lines + 1] = "茶：" .. TeaBrew.taste end
-  if FishRod.mood then lines[#lines + 1] = FishRod.mood end
+  if CookMeal.taste then lines[#lines + 1] = "饭：" .. CookMeal.taste end
+  if TentGear.mood then lines[#lines + 1] = "帐：" .. TentGear.mood end
+  if FishRod.mood then lines[#lines + 1] = "钓：" .. FishRod.mood end
   if #lines == 0 then lines[#lines + 1] = "安静的一天。也很好。" end
   return lines
 end

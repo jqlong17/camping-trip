@@ -1,0 +1,37 @@
+{
+  "name": "story-atlas",
+  "version": "1.0.0",
+  "private": true,
+  "description": "露营之旅本地故事与资源关系图",
+  "scripts": {
+    "extract:lua": "node scripts/extract-lua-runtime.mjs",
+    "scan": "npm run extract:lua && python3 ../../scripts/scan-story-atlas.py --check",
+    "dev": "npm run scan && vite --host 127.0.0.1",
+    "build": "npm run scan && tsc --noEmit && vite build",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "story-map",
+    "game-assets",
+    "react-flow"
+  ],
+  "license": "UNLICENSED",
+  "type": "module",
+  "dependencies": {
+    "@dagrejs/dagre": "^3.1.1",
+    "@xyflow/react": "^12.11.5",
+    "luaparse": "^0.3.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@types/luaparse": "^0.2.13",
+    "@types/node": "^26.4.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
+    "@vitejs/plugin-react": "^6.1.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2",
+    "vitest": "^4.1.11"
+  }
+}

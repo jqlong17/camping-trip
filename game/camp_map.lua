@@ -13,25 +13,30 @@ local decalRows = {}
 local propRows = {}
 local treeVariants = {}
 local nestTiles = {}
+local TENT_HALF_WIDTH = 1
 
 function CampMap.bindHost(h)
   host = h
 end
 
 function CampMap.isWater(t)
-  return t == 2 or t == 8
+  local semantic = Destinations.current().tiles[t]
+  return semantic and semantic.water == true or false
 end
 
 function CampMap.isDeepWater(t)
-  return t == 2
+  local semantic = Destinations.current().tiles[t]
+  return semantic and semantic.depth == "deep" or false
 end
 
 function CampMap.isOpenGround(t)
-  return t == 0 or t == 1 or t == 7
+  local semantic = Destinations.current().tiles[t]
+  return semantic and semantic.campable == true or false
 end
 
 function CampMap.isMeadow(t)
-  return t == 0 or t == 1
+  local semantic = Destinations.current().tiles[t]
+  return semantic and semantic.material == "grass" or false
 end
 
 function CampMap.creekCenterX(y)
@@ -58,11 +63,29 @@ function CampMap.tileAt(tx, ty)
   return row and row[tx] or nil
 end
 
+function CampMap.tentOccupies(tx, ty)
+  if not host or not host.getTentOpen or not host.getTentOpen() then return false end
+  local tent = host.getTentPos and host.getTentPos()
+  return tent ~= nil
+    and ty == tent.y
+    and math.abs(tx - tent.x) <= TENT_HALF_WIDTH
+end
+
+function CampMap.canPitchTent(tx, ty)
+  for x = tx - TENT_HALF_WIDTH, tx + TENT_HALF_WIDTH do
+    if not map[ty] or not CampMap.isOpenGround(map[ty][x]) then return false end
+  end
+  return true
+end
+
 function CampMap.walkable(tx, ty)
   local row = map[ty]
   if not row then return false end
+  -- 展开帐篷的布面约三格宽；底边三格不可穿过，前后仍可绕行。
+  if CampMap.tentOccupies(tx, ty) then return false end
   local t = row[tx]
-  return t == 0 or t == 1 or t == 2 or t == 5 or t == 7 or t == 8
+  local semantic = Destinations.current().tiles[t]
+  return semantic and semantic.walkable == true or false
 end
 
 function CampMap.treeVariant(tx, ty)
@@ -88,9 +111,42 @@ function CampMap.build()
   if not host then return end
   local TOP_W, TOP_H, TILE = host.TOP_W, host.TOP_H, host.TILE
   local cols, rows = TOP_W / TILE, TOP_H / TILE
+  map = {}
   decals = {}
   treeTiles = {}
   if host.onBuildStart then host.onBuildStart() end
+
+  local pack = Destinations.current()
+  if pack.layoutBuilder == "coast" then
+    for y = 0, rows - 1 do
+      map[y] = {}
+      for x = 0, cols - 1 do
+        if y <= 2 then map[y][x] = 2
+        elseif y == 3 then map[y][x] = 8
+        elseif y == 4 then map[y][x] = 9
+        elseif x >= 7 and x <= 16 and y >= 7 and y <= 12 then map[y][x] = 7
+        else map[y][x] = 0 end
+      end
+    end
+    local function place(kind, points, tile)
+      for _, p in ipairs(points) do
+        local x, y = p[1], p[2]
+        if tile then map[y][x] = tile end
+        decals[#decals + 1] = { x = x, y = y, kind = kind, v = p[3] or 0 }
+        if kind == "coast-pine" then treeTiles[#treeTiles + 1] = { x = x, y = y, v = p[3] or 0 } end
+      end
+    end
+    place("coast-pine", {{1,6},{22,6},{2,12},{21,12}}, 3)
+    place("salt-shrub", {{4,7},{19,7},{3,10},{20,11}}, 6)
+    place("beach-grass", {{6,5},{18,5},{1,9},{23,9},{5,13},{19,13}})
+    place("reef-rock", {{3,4},{7,4},{18,4},{22,4},{2,8},{21,9}}, 4)
+    place("driftwood", {{5,6},{18,10},{3,13}})
+    local fruitTrees = host.getFruitTrees and host.getFruitTrees() or {}
+    for k in pairs(fruitTrees) do fruitTrees[k] = nil end
+    firepit.x, firepit.y = pack.firepit.x, pack.firepit.y
+    if host.resetTent then host.resetTent() end
+    return
+  end
 
   for y = 0, rows - 1 do
     map[y] = {}
@@ -200,7 +256,7 @@ function CampMap.build()
   map[10][11] = 7
   map[10][12] = 7
   if host.resetTent then host.resetTent() end
-  firepit.x, firepit.y = 12, 10
+  firepit.x, firepit.y = pack.firepit.x, pack.firepit.y
 
   for _, p in ipairs({ {CampMap.creekCenterX(6), 6, 0}, {CampMap.creekCenterX(7) + 1, 7, 1}, {CampMap.creekCenterX(8), 8, 2} }) do
     local x, y, v = p[1], p[2], p[3]
@@ -213,6 +269,26 @@ function CampMap.build()
     if map[y] and map[y][x] then
       decals[#decals + 1] = { x = x, y = y, kind = "pier", v = 0 }
     end
+  end
+
+  -- 顶部五行由连续远景树林覆盖，并明确设为不可进入；不能把仍可行走、
+  -- 仍会生成鸟的地图格藏在背景图下面。
+  for y = 0, 4 do
+    for x = 0, cols - 1 do map[y][x] = 10 end
+  end
+  local visibleDecals = {}
+  for _, decal in ipairs(decals) do
+    if decal.y >= 5 then visibleDecals[#visibleDecals + 1] = decal end
+  end
+  decals = visibleDecals
+  local visibleTrees = {}
+  for _, tree in ipairs(treeTiles) do
+    if tree.y >= 5 then visibleTrees[#visibleTrees + 1] = tree end
+  end
+  treeTiles = visibleTrees
+  for key in pairs(fruitTrees) do
+    local y = tonumber(key:match(":(%d+)$"))
+    if y and y < 5 then fruitTrees[key] = nil end
   end
 end
 

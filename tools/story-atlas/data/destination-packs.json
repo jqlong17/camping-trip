@@ -1,0 +1,255 @@
+{
+  "version": 1,
+  "destinations": [
+    {
+      "id": "DEST-FOREST",
+      "key": "forest",
+      "label": "林间",
+      "sceneNodeId": "SCN-003",
+      "status": "active",
+      "tileSize": 16,
+      "mapSize": [25, 15],
+      "contextImagePath": "game/assets/scenes/forest/camp/camp_static_base.png",
+      "placementKindLabels": {
+        "grass": "草地",
+        "dirt": "泥地",
+        "dirt-fringe": "泥地边缘",
+        "deep-water": "深水",
+        "shallow-water": "浅水",
+        "shore": "河岸",
+        "tree": "树木",
+        "bush": "灌木",
+        "flower": "花",
+        "reed": "芦苇",
+        "stone": "石头",
+        "log": "倒木",
+        "stump": "木桩",
+        "nest": "鸟巢",
+        "step": "踏脚石",
+        "pier": "码头"
+      },
+      "layoutProvider": {
+        "path": "scripts/build-camp-static-base.py",
+        "function": "build_map"
+      },
+      "groups": [
+        {
+          "id": "SCGRP-FOREST-GROUND",
+          "key": "ground",
+          "label": "地表",
+          "resourcePaths": [
+            "game/assets/scenes/forest/camp/tile_grass0.png",
+            "game/assets/scenes/forest/camp/tile_grass1.png",
+            "game/assets/scenes/forest/camp/tile_grass2.png",
+            "game/assets/scenes/forest/camp/tile_grass3.png",
+            "game/assets/scenes/forest/camp/tile_grass4.png",
+            "game/assets/scenes/forest/camp/tile_grass5.png",
+            "game/assets/scenes/forest/camp/tile_grass6.png",
+            "game/assets/scenes/forest/camp/tile_grass7.png",
+            "game/assets/scenes/forest/camp/tile_dirt0.png",
+            "game/assets/scenes/forest/camp/tile_dirt1.png",
+            "game/assets/scenes/forest/camp/tile_dirt2.png",
+            "game/assets/scenes/forest/camp/tile_dirt3.png",
+            "game/assets/scenes/forest/camp/dirt_fringe_N.png",
+            "game/assets/scenes/forest/camp/dirt_fringe_S.png",
+            "game/assets/scenes/forest/camp/dirt_fringe_E.png",
+            "game/assets/scenes/forest/camp/dirt_fringe_W.png"
+          ]
+        },
+        {
+          "id": "SCGRP-FOREST-WATER",
+          "key": "water",
+          "label": "水系",
+          "resourcePaths": [
+            "game/assets/scenes/forest/camp/tile_water0.png",
+            "game/assets/scenes/forest/camp/tile_water1.png",
+            "game/assets/scenes/forest/camp/tile_water2.png",
+            "game/assets/scenes/forest/camp/tile_water3.png",
+            "game/assets/scenes/forest/camp/tile_shallow0.png",
+            "game/assets/scenes/forest/camp/tile_shallow1.png",
+            "game/assets/scenes/forest/camp/tile_shallow2.png",
+            "game/assets/scenes/forest/camp/tile_shallow3.png",
+            "game/assets/scenes/forest/camp/shore_E.png",
+            "game/assets/scenes/forest/camp/shore_W.png",
+            "game/assets/scenes/forest/camp/shore_N.png",
+            "game/assets/scenes/forest/camp/shore_S.png",
+            "game/assets/scenes/forest/camp/shore_SE.png",
+            "game/assets/scenes/forest/camp/shore_NE.png",
+            "game/assets/scenes/forest/camp/shore_NW.png",
+            "game/assets/scenes/forest/camp/shore_SW.png",
+            "game/assets/shared/tile_stone0.png",
+            "game/assets/shared/tile_stone1.png",
+            "game/assets/shared/tile_stone2.png",
+            "game/assets/scenes/forest/camp/prop_pier.png"
+          ]
+        },
+        {
+          "id": "SCGRP-FOREST-VEGETATION",
+          "key": "vegetation",
+          "label": "植被",
+          "resourcePaths": [
+            "game/assets/shared/tile_tree0.png",
+            "game/assets/shared/tile_tree1.png",
+            "game/assets/shared/tile_tree2.png",
+            "game/assets/shared/tile_tree3.png",
+            "game/assets/shared/tile_tree4.png",
+            "game/assets/shared/tile_tree5.png",
+            "game/assets/shared/tile_tree6.png",
+            "game/assets/shared/tile_tree7.png",
+            "game/assets/shared/tile_tree8.png",
+            "game/assets/shared/tile_tree9.png",
+            "game/assets/shared/tile_tree10.png",
+            "game/assets/shared/tile_tree11.png",
+            "game/assets/shared/tile_bush0.png",
+            "game/assets/shared/tile_bush1.png",
+            "game/assets/shared/tile_bush2.png",
+            "game/assets/shared/prop_flower0.png",
+            "game/assets/shared/prop_flower1.png",
+            "game/assets/shared/prop_flower2.png",
+            "game/assets/shared/prop_flower3.png",
+            "game/assets/scenes/forest/camp/prop_reed.png"
+          ]
+        },
+        {
+          "id": "SCGRP-FOREST-NATURE",
+          "key": "nature",
+          "label": "自然物",
+          "resourcePaths": [
+            "game/assets/shared/tile_stone0.png",
+            "game/assets/shared/tile_stone1.png",
+            "game/assets/shared/tile_stone2.png",
+            "game/assets/shared/prop_stump.png",
+            "game/assets/shared/prop_log.png",
+            "game/assets/scenes/forest/world/nest.png"
+          ]
+        },
+        {
+          "id": "SCGRP-FOREST-FAUNA",
+          "key": "fauna",
+          "label": "动态生物",
+          "resourcePaths": [
+            "game/assets/scenes/forest/world/fish_0.png",
+            "game/assets/scenes/forest/world/fish_1.png",
+            "game/assets/scenes/forest/world/fish_2.png",
+            "game/assets/scenes/forest/world/fish_3.png",
+            "game/assets/scenes/forest/world/fish_4.png",
+            "game/assets/scenes/forest/world/bird_0_perch.png",
+            "game/assets/scenes/forest/world/bird_0_fly0.png",
+            "game/assets/scenes/forest/world/bird_0_fly1.png",
+            "game/assets/scenes/forest/world/bird_1_perch.png",
+            "game/assets/scenes/forest/world/bird_1_fly0.png",
+            "game/assets/scenes/forest/world/bird_1_fly1.png",
+            "game/assets/scenes/forest/world/bird_2_perch.png",
+            "game/assets/scenes/forest/world/bird_2_fly0.png",
+            "game/assets/scenes/forest/world/bird_2_fly1.png",
+            "game/assets/scenes/forest/world/butterfly_0.png",
+            "game/assets/scenes/forest/world/butterfly_1.png",
+            "game/assets/scenes/forest/world/dragonfly.png",
+            "game/assets/scenes/forest/world/firefly_0.png",
+            "game/assets/scenes/forest/world/firefly_1.png"
+          ]
+        },
+        {
+          "id": "SCGRP-FOREST-COMPOSITE",
+          "key": "composite",
+          "label": "合成产物",
+          "resourcePaths": [
+            "game/assets/scenes/forest/camp/camp_static_base.png"
+          ]
+        }
+      ],
+      "futurePacks": [
+        {"key": "summit", "label": "山顶", "status": "planned"}
+      ]
+    },
+    {
+      "id": "DEST-COAST",
+      "key": "coast",
+      "label": "海边",
+      "sceneNodeId": "SCN-COAST",
+      "status": "active",
+      "tileSize": 16,
+      "mapSize": [25, 15],
+      "contextImagePath": "game/assets/scenes/coast/camp/coast_static_base.png",
+      "placementKindLabels": {
+        "sand": "沙滩",
+        "wet-sand": "湿沙",
+        "deep-water": "深海",
+        "shallow-water": "浅海",
+        "coast-pine": "海岸松",
+        "salt-shrub": "耐盐灌木",
+        "beach-grass": "海滨草",
+        "reef-rock": "礁石",
+        "driftwood": "漂流木"
+      },
+      "layoutProvider": {
+        "path": "scripts/build-coast-assets.py",
+        "function": "build_map"
+      },
+      "groups": [
+        {
+          "id": "SCGRP-COAST-GROUND",
+          "key": "ground",
+          "label": "地表",
+          "resourcePaths": [
+            "game/assets/scenes/coast/camp/tile_sand0.png",
+            "game/assets/scenes/coast/camp/tile_sand1.png",
+            "game/assets/scenes/coast/camp/tile_sand2.png",
+            "game/assets/scenes/coast/camp/tile_sand3.png",
+            "game/assets/scenes/coast/camp/tile_wet_sand.png"
+          ]
+        },
+        {
+          "id": "SCGRP-COAST-WATER",
+          "key": "water",
+          "label": "水系",
+          "resourcePaths": [
+            "game/assets/scenes/coast/camp/tile_ocean0.png",
+            "game/assets/scenes/coast/camp/tile_ocean1.png",
+            "game/assets/scenes/coast/camp/tile_ocean2.png",
+            "game/assets/scenes/coast/camp/tile_ocean3.png"
+          ]
+        },
+        {
+          "id": "SCGRP-COAST-VEGETATION",
+          "key": "vegetation",
+          "label": "植被",
+          "resourcePaths": [
+            "game/assets/scenes/coast/camp/coast_pine.png",
+            "game/assets/scenes/coast/camp/salt_shrub.png",
+            "game/assets/scenes/coast/camp/beach_grass.png"
+          ]
+        },
+        {
+          "id": "SCGRP-COAST-NATURE",
+          "key": "nature",
+          "label": "自然物",
+          "resourcePaths": [
+            "game/assets/scenes/coast/camp/reef_rock.png",
+            "game/assets/scenes/coast/camp/driftwood.png"
+          ]
+        },
+        {
+          "id": "SCGRP-COAST-FAUNA",
+          "key": "fauna",
+          "label": "动态生物",
+          "resourcePaths": [
+            "game/assets/scenes/coast/world/seabird_0.png",
+            "game/assets/scenes/coast/world/seabird_1.png",
+            "game/assets/scenes/coast/world/crab_0.png",
+            "game/assets/scenes/coast/world/crab_1.png"
+          ]
+        },
+        {
+          "id": "SCGRP-COAST-COMPOSITE",
+          "key": "composite",
+          "label": "合成产物",
+          "resourcePaths": [
+            "game/assets/scenes/coast/camp/coast_static_base.png"
+          ]
+        }
+      ],
+      "timeProfiles": ["sunrise", "day", "sunset", "night"]
+    }
+  ]
+}

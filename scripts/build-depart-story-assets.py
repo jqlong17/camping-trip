@@ -15,9 +15,22 @@ PROMO = ROOT / "docs" / "promo"
 GEN = Path("/Users/ruska/.cursor/projects/Users-ruska-projects-3ds/assets")
 
 FRAMES = (
-    ("story_d1_path_gen.png", "d1.png"),
-    ("story_d2_arrive_gen.png", "d2.png"),
+    ("story_d1_path_distinct_gen.png", "story_d1_path_distinct_gen_ref.png", "d1.png"),
+    ("story_d2_arrive_distinct_gen.png", "story_d2_arrive_distinct_gen_ref.png", "d2.png"),
 )
+
+ASSET_PROVENANCE = [
+    {
+        "outputs": "game/assets/scenes/forest/story/d1.png",
+        "sources": "docs/promo/story_d1_path_distinct_gen_ref.png",
+        "operation": "cover_crop + resize + quantize",
+    },
+    {
+        "outputs": "game/assets/scenes/forest/story/d2.png",
+        "sources": "docs/promo/story_d2_arrive_distinct_gen_ref.png",
+        "operation": "cover_crop + resize + quantize",
+    },
+]
 
 
 def hard_screen(im: Image.Image, tw: int = 400, th: int = 240, colors: int = 48) -> Image.Image:
@@ -44,11 +57,11 @@ def to_pot(content: Image.Image) -> Image.Image:
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     PROMO.mkdir(parents=True, exist_ok=True)
-    for gen_name, out_name in FRAMES:
+    for gen_name, promo_name, out_name in FRAMES:
         src = GEN / gen_name
         if not src.is_file():
             raise SystemExit(f"missing {src}")
-        raw = load_gen(gen_name, gen_name.replace(".png", "_ref.png"))
+        raw = load_gen(gen_name, promo_name)
         frame = hard_screen(raw, 400, 240, 48)
         pot = to_pot(frame)
         path = OUT / out_name

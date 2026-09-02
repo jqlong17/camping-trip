@@ -328,38 +328,68 @@ end
 function D.topView(ritual, assets)
   local phase = D.phaseById(ritual.phase or "brew")
   local title = "手冲"
-  local img, mode = nil, "icon"
+  local img, mode, previewPath = nil, "icon", nil
   if not phase then return title, nil, mode end
   if phase.kind == "brew" then
     local labels = { "手冲 · 闷蒸", "手冲 · 绕圈注水", "手冲 · 分享入杯" }
     title = labels[ritual.brewStep] or "手冲"
     img = assets and assets.drip and assets.drip[ritual.brewStep]
     mode = "brew"
+    previewPath = "assets/previews/ritual/drip/drip_" .. tostring(ritual.brewStep) .. ".png"
   elseif phase.kind == "confirm" then
     title = "放滤纸"
     img = assets and assets.paper
+    previewPath = "assets/previews/ritual/drip/paper.png"
   elseif phase.kind == "choice" then
     local list = D.catalogFor(phase)
     local item = list and list[ritual.pick]
     title = phase.head .. " · " .. D.choiceLabel(phase, item)
     img = D.choiceIcon(phase, item, assets)
+    if item then
+      if phase.assetBag == "beans" then previewPath = "assets/previews/ritual/drip/bean_" .. item.id .. ".png"
+      elseif phase.assetBag == "grinds" then previewPath = "assets/previews/ritual/drip/grind_" .. item.id .. ".png"
+      elseif phase.assetBag == "drippers" then previewPath = "assets/previews/ritual/drip/dripper_" .. item.id .. ".png"
+      elseif phase.assetBag == "temps" then previewPath = "assets/previews/ritual/drip/temp_" .. tostring(item.c) .. ".png"
+      elseif phase.assetBag == "pours" then previewPath = "assets/previews/ritual/drip/pours_" .. tostring(item) .. ".png" end
+    end
   end
-  return title, img, mode
+  return title, img, mode, previewPath
 end
 
 function D.drawTop(ritual, assets, ctx)
   love.graphics.setColor(0, 0, 0, 0.45)
   love.graphics.rectangle("fill", 0, 0, ctx.TOP_W, ctx.TOP_H)
-  local title, img, mode = D.topView(ritual, assets)
+  local title, img, mode, previewPath = D.topView(ritual, assets)
+  local preview = ctx.loadTopPreview and ctx.loadTopPreview(previewPath)
+  if preview then img, mode = preview, "preview" end
   if img then
     love.graphics.setColor(1, 1, 1, 1)
-    if mode == "brew" then
-      local srcW, srcH, s = 120, 76, 2
-      ctx.drawFitted(img, math.floor((ctx.TOP_W - srcW * s) / 2), 34, srcW, srcH, s, s)
+    local iw, ih = img:getWidth(), img:getHeight()
+    if mode == "preview" then
+      local x, y = math.floor((ctx.TOP_W - 320) / 2), 44
+      if ctx.drawFitted then ctx.drawFitted(img, x, y, 320, 180, 1, 1)
+      else love.graphics.draw(img, x, y) end
+    elseif mode == "brew" then
+      -- 固定按 160×120 内容区算（真机 POT 纹理可能更大）
+      -- 略缩小后在标题下方带里偏下居中，避免贴顶悬空
+      local srcW, srcH = 160, 120
+      if iw < srcW or ih < srcH then srcW, srcH = iw, ih end
+      local topPad, botPad = 38, 36
+      local maxW = ctx.TOP_W - 56
+      local maxH = ctx.TOP_H - topPad - botPad
+      local s = math.min(maxW / srcW, maxH / srcH)
+      local dw, dh = srcW * s, srcH * s
+      local x = math.floor((ctx.TOP_W - dw) / 2)
+      -- 几何中心再下移约 1/5 剩余边距，视觉更靠中下
+      local slack = maxH - dh
+      local y = topPad + math.floor(slack * 0.65)
+      if ctx.drawFitted then
+        ctx.drawFitted(img, x, y, srcW, srcH, s, s)
+      else
+        love.graphics.draw(img, x, y, 0, s, s)
+      end
     else
-      local s = 3
-      local iw, ih = img:getWidth(), img:getHeight()
-      love.graphics.draw(img, (ctx.TOP_W - iw * s) / 2, 56, 0, s, s)
+      love.graphics.draw(img, math.floor((ctx.TOP_W - iw) / 2), math.floor((ctx.TOP_H - ih) / 2))
     end
   end
   if ctx.uiFont then love.graphics.setFont(ctx.uiFont) end
@@ -372,25 +402,29 @@ end
 
 local function drawChoiceRow(ritual, items, phase, assets, BOT_W)
   local n = #items
-  local slotW = math.floor((BOT_W - 20) / math.min(n, 5))
+  local slotW = math.floor((BOT_W - 20) / math.max(n, 1))
   for i, it in ipairs(items) do
     local x = 10 + (i - 1) * slotW
     local on = (i == ritual.pick)
+    local boxW = slotW - 4
     love.graphics.setColor(on and 0.98 or 0.94, on and 0.88 or 0.9, on and 0.55 or 0.82)
-    love.graphics.rectangle("fill", x, 48, slotW - 4, 110)
+    love.graphics.rectangle("fill", x, 48, boxW, 96)
     love.graphics.setColor(0.3, 0.2, 0.12)
-    love.graphics.rectangle("line", x, 48, slotW - 4, 110)
+    love.graphics.rectangle("line", x, 48, boxW, 96)
     local icon = D.choiceIcon(phase, it, assets)
     if icon then
       love.graphics.setColor(1, 1, 1, 1)
       local iw, ih = icon:getWidth(), icon:getHeight()
-      local s = math.min(40 / iw, 36 / ih)
-      love.graphics.draw(icon, x + (slotW - 4 - iw * s) / 2, 56, 0, s, s)
+      local s = math.min(40 / iw, 40 / ih)
+      love.graphics.draw(icon, x + (boxW - iw * s) / 2, 54, 0, s, s)
     end
     love.graphics.setColor(0.22, 0.14, 0.08)
-    love.graphics.print(D.choiceLabel(phase, it), x + 4, 100)
+    love.graphics.printf(D.choiceLabel(phase, it), x, 108, boxW, "center")
+  end
+  local cur = items[ritual.pick]
+  if cur then
     love.graphics.setColor(0.4, 0.3, 0.2)
-    love.graphics.print(D.choiceNote(phase, it), x + 4, 118)
+    love.graphics.printf(D.choiceNote(phase, cur), 12, 152, BOT_W - 24, "center")
   end
 end
 
@@ -400,21 +434,21 @@ function D.drawBottom(ritual, assets, ctx)
   local head = "手冲"
   if phase then
     if phase.kind == "brew" then
-      head = tostring(idx) .. "/" .. #D.PHASES .. " " .. phase.head .. " · " .. tostring(ritual.brewStep) .. "/3"
+      head = tostring(idx) .. "·" .. #D.PHASES .. " " .. phase.head .. " · " .. tostring(ritual.brewStep) .. "·3"
     else
-      head = tostring(idx) .. "/" .. #D.PHASES .. " " .. phase.head
+      head = tostring(idx) .. "·" .. #D.PHASES .. " " .. phase.head
     end
   end
   love.graphics.setColor(0.32, 0.22, 0.14)
   love.graphics.rectangle("fill", 6, 6, BOT_W - 12, 28)
   love.graphics.setColor(1, 0.96, 0.88)
-  love.graphics.print(head, 14, 12)
+  love.graphics.printf(head, 10, 12, BOT_W - 20, "left")
 
   if phase and phase.kind == "choice" then
     drawChoiceRow(ritual, D.catalogFor(phase), phase, assets, BOT_W)
   elseif phase and phase.kind == "confirm" then
     love.graphics.setColor(0.25, 0.18, 0.1)
-    love.graphics.print("把滤纸折好，放进滤杯。", 40, 80)
+    love.graphics.printf("把滤纸折好，放进滤杯。", 20, 80, BOT_W - 40, "center")
     if assets and assets.paper then
       love.graphics.setColor(1, 1, 1, 1)
       love.graphics.draw(assets.paper, 136, 100, 0, 2, 2)
@@ -423,19 +457,20 @@ function D.drawBottom(ritual, assets, ctx)
     love.graphics.setColor(0.25, 0.18, 0.1)
     local b = D.beans[ritual.beanI]
     local d = D.drippers[ritual.dripperI]
-    love.graphics.print((b and b.name or "?") .. " · " .. (d and d.name or "?")
-      .. " · " .. tostring(ritual.tempC) .. "度 · " .. tostring(ritual.pours) .. "次", 24, 70)
-    love.graphics.print("闻得到咖啡香了。慢慢来。", 24, 100)
+    love.graphics.printf((b and b.name or "?") .. " · " .. (d and d.name or "?")
+      .. " · " .. tostring(ritual.tempC) .. "度 · " .. tostring(ritual.pours) .. "次",
+      16, 70, BOT_W - 32, "center")
+    love.graphics.printf("闻得到咖啡香了。慢慢来。", 16, 100, BOT_W - 32, "center")
   end
 
   love.graphics.setColor(0.35, 0.55, 0.35)
   love.graphics.rectangle("fill", 100, 210, 120, 22)
   love.graphics.setColor(1, 1, 1)
-  love.graphics.print((phase and phase.kind == "brew") and "A 下一步" or "A 确认", 128, 213)
+  love.graphics.printf((phase and phase.kind == "brew") and "A 下一步" or "A 确认", 100, 213, 120, "center")
   love.graphics.setColor(0.55, 0.4, 0.35)
   love.graphics.rectangle("fill", 230, 210, 70, 22)
   love.graphics.setColor(1, 1, 1)
-  love.graphics.print("取消", 248, 213)
+  love.graphics.printf("取消", 230, 213, 70, "center")
 end
 
 function D.potHint(drippedOnce, coffeeCups, highlight)

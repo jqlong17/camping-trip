@@ -18,7 +18,9 @@ function Session.bindHost(h)
     ensureRitual = h.ensureRitual,
     playerXY = function() return R.player.x, R.player.y end,
     tileAt = CampMap.tileAt,
+    isWater = CampMap.isWater,
     walkable = CampMap.walkable,
+    canPitchTent = CampMap.canPitchTent,
     getMap = CampMap.getMap,
     getFruitTrees = function() return State.trip.fruitTrees end,
     getHaul = function() return State.trip.haul end,
@@ -27,7 +29,10 @@ function Session.bindHost(h)
     getTentOpen = function() return R.tentOpen end,
     setTentOpen = function(v) R.tentOpen = v end,
     getTentPos = function() return R.tentPos end,
-    setTentPos = function(x, y) R.tentPos = { x = x, y = y } end,
+    setTentPos = function(x, y, ground)
+      if x == nil or y == nil then R.tentPos = nil
+      else R.tentPos = { x = x, y = y, ground = ground or 7 } end
+    end,
     getTentStyle = function() return R.tentColorI or 1, R.tentStyleI or 1, R.tentDoorI or 1 end,
     setTentStyle = function(c, s, d)
       R.tentColorI, R.tentStyleI, R.tentDoorI = c or 1, s or 1, d or 1
@@ -56,13 +61,12 @@ function Session.bindHost(h)
     onBrewMap = Session.onBrewMap,
     addTripCoffee = function(n) State.trip.haul.coffee = (State.trip.haul.coffee or 0) + (n or 1) end,
     addTripTea = function(n) State.trip.haul.tea = (State.trip.haul.tea or 0) + (n or 1) end,
+    addTripMeal = function(n) State.trip.haul.meals = (State.trip.haul.meals or 0) + (n or 1) end,
     addFish = function(kind)
       local fish = State.trip.haul.fish
       fish[kind] = (fish[kind] or 0) + 1
     end,
     onFishSplash = function() CampWorld.getFishFX().timer = 0.05 end,
-    startFanRitual = Session.startFanRitual,
-    skipFanRitual = Session.skipFanRitual,
     setBrewActive = function(v) R.brewActive = v end,
   })
 end
@@ -105,37 +109,7 @@ function Session.clearRitual()
   R.ritual = nil
 end
 
-function Session.startFanRitual()
-  host.ensureRitual()
-  R.ritual = { kind = "fan", step = 1, max = 4, t = 0, frameDur = 0.35 }
-  Audio.playSfx("fan")
-  host.say("扇风……", 1.2)
-end
-
-function Session.skipFanRitual()
-  if R.ritual and R.ritual.kind == "fan" then
-    R.ritual.step = R.ritual.max
-    R.ritual.t = R.ritual.frameDur
-    Session.updateTimedRitual(0)
-  end
-end
-
-function Session.updateTimedRitual(dt)
-  local ritual = R.ritual
-  if not ritual or ritual.kind ~= "fan" or not ritual.frameDur then return end
-  ritual.t = (ritual.t or 0) + dt
-  if ritual.t < ritual.frameDur then return end
-  ritual.t = 0
-  if ritual.step < ritual.max then
-    ritual.step = ritual.step + 1
-    if ritual.step == 3 then
-      Audio.playSfx("fan")
-      host.say("凉快一点了。", 2)
-    end
-  else
-    Session.clearRitual()
-    host.say("风停了。", 1.5)
-  end
+function Session.updateTimedRitual(_dt)
 end
 
 function Session.onBrewMap(x, y, timer)
@@ -160,10 +134,11 @@ function Session.drinkCoffee()
   end
   R.coffeeCups = R.coffeeCups + 1
   R.cupPick, R.cupKind = false, nil
-  local style = AP.CUP_STYLES[R.cupStyle]
-  local line = CupSip.composeSipLine(DripBrew.taste, style, "coffee", R.coffeeCups, DripBrew.CUPS_PER_POT)
-  host.say(line, 3)
-  CupSip.start("coffee")
+  CupSip.start("coffee", {
+    taste = DripBrew.taste,
+    style = AP.CUP_STYLES[R.cupStyle],
+    sipIndex = R.coffeeCups
+  })
 end
 
 function Session.drinkTea()
@@ -173,10 +148,11 @@ function Session.drinkTea()
   end
   R.teaCups = R.teaCups + 1
   R.cupPick, R.cupKind = false, nil
-  local style = AP.CUP_STYLES[R.cupStyle]
-  local line = CupSip.composeSipLine(TeaBrew.taste, style, "tea", R.teaCups, TeaBrew.CUPS_PER_POT)
-  host.say(line, 3)
-  CupSip.start("tea")
+  CupSip.start("tea", {
+    taste = TeaBrew.taste,
+    style = AP.CUP_STYLES[R.cupStyle],
+    sipIndex = R.teaCups
+  })
 end
 
 function Session.drinkFromCup()
@@ -211,6 +187,9 @@ function Session.tryMove(dx, dy)
     R.player.walkFrame = R.player.walkFrame == 1 and 2 or 1
     R.player.idleT = 0.28
     Audio.playSfx("step")
+    if CampMap.isWater(CampMap.tileAt(nx, ny)) and host and host.spawnSplash then
+      host.spawnSplash(nx, ny)
+    end
   end
   if dx ~= 0 or dy ~= 0 then
     if math.abs(dx) > math.abs(dy) then R.player.facing = dx > 0 and 2 or 1

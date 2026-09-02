@@ -69,6 +69,10 @@ ritual/fish/fish_4_miss.png
 
 手冲 / 泡茶已分目录：`ritual/drip/`、`ritual/tea/`。
 
+上屏不直接放大上述 48×48/160×120 资源；运行时使用
+`assets/previews/ritual/fish/*.png`（320×180，直接由 `docs/promo` 高分辨率源
+构建）。同一时刻只驻留当前 preview，POT RGBA8888 预算 ≤512 KiB。
+
 ---
 
 ## 6. 宿主绑定

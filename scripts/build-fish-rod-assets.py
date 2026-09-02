@@ -14,6 +14,24 @@ BAITS = ["worm", "dough", "lure", "bug", "corn"]
 SINKERS = ["light", "mid", "heavy"]
 STYLES = ["wait", "twitch", "dance"]
 
+ASSET_PROVENANCE = [
+    {
+        "outputs": "game/assets/ritual/fish/spot_*.png",
+        "sources": "docs/promo/fish_spots_v2_sheet_gen_ref.png",
+        "operation": "slice_runs + crop + resize + quantize",
+    },
+    {
+        "outputs": "game/assets/ritual/fish/bait_*.png",
+        "sources": "docs/promo/fish_baits_sheet_gen_ref.png",
+        "operation": "slice_runs + crop + resize + quantize",
+    },
+    {
+        "outputs": ["game/assets/ritual/fish/sinker_*.png", "game/assets/ritual/fish/style_*.png"],
+        "sources": "docs/promo/fish_sinkers_styles_sheet_gen_ref.png",
+        "operation": "slice_runs + crop + resize + quantize",
+    },
+]
+
 
 def save(name: str, im) -> None:
     FISH_DIR.mkdir(parents=True, exist_ok=True)

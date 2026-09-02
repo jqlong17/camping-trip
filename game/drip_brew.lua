@@ -328,33 +328,48 @@ end
 function D.topView(ritual, assets)
   local phase = D.phaseById(ritual.phase or "brew")
   local title = "手冲"
-  local img, mode = nil, "icon"
+  local img, mode, previewPath = nil, "icon", nil
   if not phase then return title, nil, mode end
   if phase.kind == "brew" then
     local labels = { "手冲 · 闷蒸", "手冲 · 绕圈注水", "手冲 · 分享入杯" }
     title = labels[ritual.brewStep] or "手冲"
     img = assets and assets.drip and assets.drip[ritual.brewStep]
     mode = "brew"
+    previewPath = "assets/previews/ritual/drip/drip_" .. tostring(ritual.brewStep) .. ".png"
   elseif phase.kind == "confirm" then
     title = "放滤纸"
     img = assets and assets.paper
+    previewPath = "assets/previews/ritual/drip/paper.png"
   elseif phase.kind == "choice" then
     local list = D.catalogFor(phase)
     local item = list and list[ritual.pick]
     title = phase.head .. " · " .. D.choiceLabel(phase, item)
     img = D.choiceIcon(phase, item, assets)
+    if item then
+      if phase.assetBag == "beans" then previewPath = "assets/previews/ritual/drip/bean_" .. item.id .. ".png"
+      elseif phase.assetBag == "grinds" then previewPath = "assets/previews/ritual/drip/grind_" .. item.id .. ".png"
+      elseif phase.assetBag == "drippers" then previewPath = "assets/previews/ritual/drip/dripper_" .. item.id .. ".png"
+      elseif phase.assetBag == "temps" then previewPath = "assets/previews/ritual/drip/temp_" .. tostring(item.c) .. ".png"
+      elseif phase.assetBag == "pours" then previewPath = "assets/previews/ritual/drip/pours_" .. tostring(item) .. ".png" end
+    end
   end
-  return title, img, mode
+  return title, img, mode, previewPath
 end
 
 function D.drawTop(ritual, assets, ctx)
   love.graphics.setColor(0, 0, 0, 0.45)
   love.graphics.rectangle("fill", 0, 0, ctx.TOP_W, ctx.TOP_H)
-  local title, img, mode = D.topView(ritual, assets)
+  local title, img, mode, previewPath = D.topView(ritual, assets)
+  local preview = ctx.loadTopPreview and ctx.loadTopPreview(previewPath)
+  if preview then img, mode = preview, "preview" end
   if img then
     love.graphics.setColor(1, 1, 1, 1)
     local iw, ih = img:getWidth(), img:getHeight()
-    if mode == "brew" then
+    if mode == "preview" then
+      local x, y = math.floor((ctx.TOP_W - 320) / 2), 44
+      if ctx.drawFitted then ctx.drawFitted(img, x, y, 320, 180, 1, 1)
+      else love.graphics.draw(img, x, y) end
+    elseif mode == "brew" then
       -- 固定按 160×120 内容区算（真机 POT 纹理可能更大）
       -- 略缩小后在标题下方带里偏下居中，避免贴顶悬空
       local srcW, srcH = 160, 120
@@ -374,8 +389,7 @@ function D.drawTop(ritual, assets, ctx)
         love.graphics.draw(img, x, y, 0, s, s)
       end
     else
-      local s = 3
-      love.graphics.draw(img, (ctx.TOP_W - iw * s) / 2, (ctx.TOP_H - ih * s) / 2, 0, s, s)
+      love.graphics.draw(img, math.floor((ctx.TOP_W - iw) / 2), math.floor((ctx.TOP_H - ih) / 2))
     end
   end
   if ctx.uiFont then love.graphics.setFont(ctx.uiFont) end

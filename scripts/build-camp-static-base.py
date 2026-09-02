@@ -14,8 +14,43 @@ ROOT = Path(__file__).resolve().parents[1]
 from asset_layout import FOREST_CAMP, FOREST_WORLD, SHARED, ASSETS
 
 OUT = FOREST_CAMP / "camp_static_base.png"
+DISTANT_OUT = FOREST_CAMP / "forest_distant_canopy.png"
+DISTANT_SOURCE = ROOT / "docs" / "promo" / "forest_distant_canopy_v2_gen_ref.png"
 TOP_W, TOP_H, TILE = 400, 240, 16
 PALETTE = 48
+
+ASSET_PROVENANCE = [
+    {
+        "outputs": ["game/assets/scenes/forest/camp/camp_static_base.png"],
+        "sources": [
+            "game/assets/scenes/forest/camp/tile_water0.png",
+            "game/assets/scenes/forest/camp/tile_water1.png",
+            "game/assets/scenes/forest/camp/tile_water2.png",
+            "game/assets/scenes/forest/camp/tile_water3.png",
+            "game/assets/scenes/forest/camp/tile_shallow0.png",
+            "game/assets/scenes/forest/camp/tile_shallow1.png",
+            "game/assets/scenes/forest/camp/tile_shallow2.png",
+            "game/assets/scenes/forest/camp/tile_shallow3.png",
+            "game/assets/scenes/forest/camp/shore_E.png",
+            "game/assets/scenes/forest/camp/shore_W.png",
+            "game/assets/scenes/forest/camp/shore_N.png",
+            "game/assets/scenes/forest/camp/shore_S.png",
+            "game/assets/scenes/forest/camp/shore_NE.png",
+            "game/assets/scenes/forest/camp/shore_NW.png",
+            "game/assets/scenes/forest/camp/shore_SE.png",
+            "game/assets/scenes/forest/camp/shore_SW.png",
+        ],
+        "operation": "SCN-003 static 25x15 scene composition + 48-color hard-pixel bake",
+    },
+    {
+        "outputs": [
+            "game/assets/scenes/forest/camp/forest_distant_canopy.png",
+            "game/assets/scenes/forest/camp/camp_static_base.png",
+        ],
+        "sources": ["docs/promo/forest_distant_canopy_v2_gen_ref.png"],
+        "operation": "distant_forest_crop + nearest_resize + scene_composite",
+    },
+]
 
 
 def open_rgba(name: str) -> Image.Image:
@@ -95,13 +130,16 @@ def build_map() -> tuple[dict[int, dict[int, int]], list[dict[str, int | str]]]:
                 if abs(x - cx) <= 1 or is_deep_water(camp_map[y][x]):
                     camp_map[y][x] = 8
 
+    # Keep this declarative placement list byte-for-byte equivalent to CampMap.build.
+    # Story Atlas executes build_map() to materialize stable scene placement instances.
     trees = [
-        (1, 1, 0), (2, 0, 2), (4, 1, 1), (6, 0, 3), (0, 3, 4), (3, 4, 5),
-        (7, 2, 6), (9, 0, 7), (1, 6, 2), (2, 8, 0), (4, 7, 3), (0, 10, 1),
-        (3, 11, 5), (5, 13, 4), (7, 13, 6), (10, 1, 1), (16, 0, 7),
-        (18, 0, 0), (19, 2, 2), (21, 1, 3), (22, 3, 5), (23, 0, 4),
-        (20, 5, 6), (22, 6, 0), (23, 8, 7), (23, 10, 1), (21, 12, 2),
-        (23, 13, 5), (6, 5, 3), (8, 3, 2), (2, 12, 4), (0, 7, 1),
+        (1, 1, 0), (2, 0, 8), (4, 1, 1), (6, 0, 9), (0, 3, 4), (3, 4, 10),
+        (7, 2, 6), (9, 0, 11), (1, 6, 2), (2, 8, 0), (4, 7, 3), (0, 10, 8),
+        (3, 11, 5), (5, 13, 9), (7, 13, 6), (10, 1, 1), (16, 0, 7),
+        (18, 0, 10), (19, 2, 2), (21, 1, 3), (22, 3, 11), (23, 0, 4),
+        (20, 5, 6), (22, 6, 0), (23, 8, 7), (23, 10, 8), (21, 12, 2),
+        (23, 13, 5), (6, 5, 9), (8, 3, 2), (2, 12, 10), (0, 7, 1),
+        (14, 2, 11), (15, 12, 8),
     ]
     for x, y, v in trees:
         if y in camp_map and x in camp_map[y] and not is_water(camp_map[y][x]):
@@ -138,7 +176,7 @@ def build_map() -> tuple[dict[int, dict[int, int]], list[dict[str, int | str]]]:
         if kind == "reed":
             decals.append({"x": creek_center_x(y) - 1, "y": y, "kind": "reed", "v": 0})
 
-    camp_map[10][11] = 5
+    camp_map[10][11] = 7
     camp_map[10][12] = 7
 
     for x, y, v in [(creek_center_x(6), 6, 0), (creek_center_x(7) + 1, 7, 1), (creek_center_x(8), 8, 2)]:
@@ -146,15 +184,33 @@ def build_map() -> tuple[dict[int, dict[int, int]], list[dict[str, int | str]]]:
             decals.append({"x": x, "y": y, "kind": "step", "v": v})
     y, x = 13, creek_center_x(13)
     decals.append({"x": x, "y": y, "kind": "pier", "v": 0})
+
+    # The top five rows are a visual distance layer, not traversable ground.
+    # Keep runtime and Story Atlas coordinates explicit instead of hiding live
+    # collision tiles underneath the generated forest wall.
+    for y in range(5):
+        for x in range(cols):
+            camp_map[y][x] = 10
+    decals = [decal for decal in decals if int(decal["y"]) >= 5]
     return camp_map, decals
 
 
 def main() -> int:
     camp_map, decals = build_map()
+    distant_source = Image.open(DISTANT_SOURCE).convert("RGBA")
+    # The generator intentionally left white framing around the authored
+    # forest. Crop only the continuous sky/canopy/meadow band, then reduce it
+    # as one image so tree heights and overlaps remain coherent.
+    distant = distant_source.crop((0, 220, distant_source.width, 724))
+    distant = distant.resize((TOP_W, 80), Image.Resampling.NEAREST)
+    distant = quantize_rgba(distant, PALETTE).crop((0, 0, TOP_W, 80))
+    DISTANT_OUT.parent.mkdir(parents=True, exist_ok=True)
+    distant.save(DISTANT_OUT)
+
     grass = [open_rgba(f"tile_grass{i}.png") for i in range(8)]
     dirt = [open_rgba(f"tile_dirt{i}.png") for i in range(4)]
-    water = open_rgba("tile_water0.png")
-    shallow = open_rgba("tile_shallow0.png")
+    water = [open_rgba(f"tile_water{i}.png") for i in range(4)]
+    shallow = [open_rgba(f"tile_shallow{i}.png") for i in range(4)]
     shore = {k: open_rgba(f"shore_{k}.png") for k in ["E", "W", "N", "S", "SE", "NE", "NW", "SW"]}
     fringe = {k: open_rgba(f"dirt_fringe_{k}.png") for k in ["N", "S", "E", "W"]}
     flowers = [open_rgba(f"prop_flower{i}.png") for i in range(4)]
@@ -173,6 +229,20 @@ def main() -> int:
     def tile_at(tx: int, ty: int) -> int | None:
         return camp_map.get(ty, {}).get(tx)
 
+    def paste_land_shore(px: int, py: int, adjacent: dict[str, bool]) -> None:
+        """Choose canonical 8-way land overlays; never carpet the water tile."""
+        covered: set[str] = set()
+        for corner, first, second in (
+            ("NE", "N", "E"), ("NW", "N", "W"),
+            ("SE", "S", "E"), ("SW", "S", "W"),
+        ):
+            if adjacent[first] and adjacent[second]:
+                paste(out, shore[corner], px, py)
+                covered.update((first, second))
+        for direction in ("N", "S", "E", "W"):
+            if adjacent[direction] and direction not in covered:
+                paste(out, shore[direction], px, py)
+
     nest_keys = {(int(d["x"]), int(d["y"])) for d in decals if d["kind"] == "nest"}
 
     for y in range(TOP_H // TILE):
@@ -180,11 +250,8 @@ def main() -> int:
             t = camp_map[y][x]
             px, py = x * TILE, y * TILE
             if t in (2, 8):
-                paste(out, shallow if t == 8 else water, px, py)
-                if not is_water(tile_at(x + 1, y)): paste(out, shore["E"], px, py)
-                if not is_water(tile_at(x - 1, y)): paste(out, shore["W"], px, py)
-                if not is_water(tile_at(x, y - 1)): paste(out, shore["N"], px, py)
-                if not is_water(tile_at(x, y + 1)): paste(out, shore["S"], px, py)
+                variant = (x * 5 + y * 3) % 4
+                paste(out, shallow[variant] if t == 8 else water[variant], px, py)
             elif t == 7 or t == 5:
                 # Tent starts as dirt pad in the baked layer; runtime draws the tent sprite.
                 paste(out, dirt[(x * 3 + y * 5) % 4], px, py)
@@ -198,17 +265,20 @@ def main() -> int:
                     paste(out, fringe["E"], px, py)
                 if w in (0, 1):
                     paste(out, fringe["W"], px, py)
+                paste_land_shore(px, py, {
+                    "E": is_water(tile_at(x + 1, y)),
+                    "W": is_water(tile_at(x - 1, y)),
+                    "N": is_water(tile_at(x, y - 1)),
+                    "S": is_water(tile_at(x, y + 1)),
+                })
             else:
                 paste(out, grass[(x * 17 + y * 31) % 8], px, py)
-                e, w, n, s = is_water(tile_at(x + 1, y)), is_water(tile_at(x - 1, y)), is_water(tile_at(x, y - 1)), is_water(tile_at(x, y + 1))
-                if e: paste(out, shore["E"], px, py)
-                if w: paste(out, shore["W"], px, py)
-                if n: paste(out, shore["N"], px, py)
-                if s: paste(out, shore["S"], px, py)
-                if n and e: paste(out, shore["NE"], px, py)
-                if n and w: paste(out, shore["NW"], px, py)
-                if s and e: paste(out, shore["SE"], px, py)
-                if s and w: paste(out, shore["SW"], px, py)
+                paste_land_shore(px, py, {
+                    "E": is_water(tile_at(x + 1, y)),
+                    "W": is_water(tile_at(x - 1, y)),
+                    "N": is_water(tile_at(x, y - 1)),
+                    "S": is_water(tile_at(x, y + 1)),
+                })
 
         for d in decals:
             if d["y"] != y:
@@ -243,6 +313,7 @@ def main() -> int:
                 paste(out, shadow_sm, px + TILE // 2 - shadow_sm.width // 2 + 3, py + TILE - shadow_sm.height + 2)
                 paste(out, stone, px, py + TILE - stone.height)
 
+    paste(out, distant, 0, 0)
     out = quantize_rgba(out, PALETTE)
     OUT.parent.mkdir(parents=True, exist_ok=True)
     out.save(OUT)

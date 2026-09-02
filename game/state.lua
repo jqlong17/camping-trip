@@ -6,6 +6,7 @@
 local State = {}
 
 State.trip = {
+  destinationId = "forest",
   haul = { fruit = 0, coffee = 0, tea = 0, fish = { ayu = 0, trout = 0, carp = 0 } },
   fruitTrees = {},
 }
@@ -15,6 +16,7 @@ State.save = {
   data = {
     castId = 1,
     castChosen = false,
+    lastDestinationId = "forest",
     trips = 0,
     totals = {
       coffee = 0,
@@ -47,6 +49,11 @@ State.cast = {
 }
 
 State.castMode = "journey"
+
+State.destination = {
+  i = 1,
+  ids = { "forest", "coast" },
+}
 
 function State.resetTripHaul(emptyFish)
   State.trip.haul = {

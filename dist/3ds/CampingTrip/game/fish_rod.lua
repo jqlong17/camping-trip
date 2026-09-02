@@ -296,7 +296,7 @@ end
 
 function F.topView(ritual, assets)
   local phase = F.phaseById(ritual.phase or "brew")
-  local title, img, mode = "钓鱼", nil, "icon"
+  local title, img, mode, previewPath = "钓鱼", nil, "icon", nil
   if not phase then return title, nil, mode end
   if phase.kind == "brew" then
     title = "钓鱼 · " .. (F.brewLabels[ritual.brewStep] or tostring(ritual.brewStep))
@@ -309,32 +309,55 @@ function F.topView(ritual, assets)
       title = "钓到 · " .. H().fishName(ritual.fishKind)
     end
     mode = "brew"
+    previewPath = "assets/previews/ritual/fish/"
+      .. ((ritual.brewStep == 4 and not ritual.caught) and "fish_4_miss.png"
+        or ("fish_" .. tostring(ritual.brewStep) .. ".png"))
   elseif phase.kind == "confirm" then
     title = "抛竿"
     img = assets and assets.fishAnim and assets.fishAnim[1]
     mode = "brew"
+    previewPath = "assets/previews/ritual/fish/fish_1.png"
   elseif phase.kind == "choice" then
     local list = F.catalogFor(phase)
     local item = list and list[ritual.pick]
     title = phase.head .. " · " .. F.choiceLabel(phase, item)
     img = F.choiceIcon(phase, item, assets)
+    if item and phase.assetBag then
+      local prefix = ({ spots = "spot", baits = "bait", sinkers = "sinker", styles = "style" })[phase.assetBag]
+      if prefix then previewPath = "assets/previews/ritual/fish/" .. prefix .. "_" .. item.id .. ".png" end
+    end
   end
-  return title, img, mode
+  return title, img, mode, previewPath
 end
 
 function F.drawTop(ritual, assets, ctx)
   love.graphics.setColor(0, 0, 0, 0.45)
   love.graphics.rectangle("fill", 0, 0, ctx.TOP_W, ctx.TOP_H)
-  local title, img, mode = F.topView(ritual, assets)
+  local title, img, mode, previewPath = F.topView(ritual, assets)
+  local preview = ctx.loadTopPreview and ctx.loadTopPreview(previewPath)
+  if preview then img, mode = preview, "preview" end
   if img then
     love.graphics.setColor(1, 1, 1, 1)
-    if mode == "brew" then
-      local srcW, srcH, s = 120, 76, 2
-      ctx.drawFitted(img, math.floor((ctx.TOP_W - srcW * s) / 2), 34, srcW, srcH, s, s)
-    else
-      local s = 3
+    if mode == "preview" then
+      local x, y = math.floor((ctx.TOP_W - 320) / 2), 44
+      if ctx.drawFitted then ctx.drawFitted(img, x, y, 320, 180, 1, 1)
+      else love.graphics.draw(img, x, y) end
+    elseif mode == "brew" then
+      local srcW, srcH = 160, 120
       local iw, ih = img:getWidth(), img:getHeight()
-      love.graphics.draw(img, (ctx.TOP_W - iw * s) / 2, 56, 0, s, s)
+      if iw < srcW or ih < srcH then srcW, srcH = iw, ih end
+      local maxW, maxH = ctx.TOP_W - 32, ctx.TOP_H - 40
+      local s = math.min(maxW / srcW, maxH / srcH)
+      local x = math.floor((ctx.TOP_W - srcW * s) / 2)
+      local y = math.floor((ctx.TOP_H - srcH * s) / 2)
+      if ctx.drawFitted then
+        ctx.drawFitted(img, x, y, srcW, srcH, s, s)
+      else
+        love.graphics.draw(img, x, y, 0, s, s)
+      end
+    else
+      local iw, ih = img:getWidth(), img:getHeight()
+      love.graphics.draw(img, math.floor((ctx.TOP_W - iw) / 2), math.floor((ctx.TOP_H - ih) / 2))
     end
   end
   if ctx.uiFont then love.graphics.setFont(ctx.uiFont) end
@@ -347,25 +370,29 @@ end
 
 local function drawChoiceRow(ritual, items, phase, assets, BOT_W)
   local n = #items
-  local slotW = math.floor((BOT_W - 20) / math.min(n, 5))
+  local slotW = math.floor((BOT_W - 20) / math.max(n, 1))
   for i, it in ipairs(items) do
     local x = 10 + (i - 1) * slotW
     local on = (i == ritual.pick)
+    local boxW = slotW - 4
     love.graphics.setColor(on and 0.98 or 0.94, on and 0.88 or 0.9, on and 0.55 or 0.82)
-    love.graphics.rectangle("fill", x, 48, slotW - 4, 110)
+    love.graphics.rectangle("fill", x, 48, boxW, 96)
     love.graphics.setColor(0.3, 0.2, 0.12)
-    love.graphics.rectangle("line", x, 48, slotW - 4, 110)
+    love.graphics.rectangle("line", x, 48, boxW, 96)
     local icon = F.choiceIcon(phase, it, assets)
     if icon then
       love.graphics.setColor(1, 1, 1, 1)
       local iw, ih = icon:getWidth(), icon:getHeight()
-      local s = math.min(40 / iw, 36 / ih)
-      love.graphics.draw(icon, x + (slotW - 4 - iw * s) / 2, 56, 0, s, s)
+      local s = math.min(40 / iw, 40 / ih)
+      love.graphics.draw(icon, x + (boxW - iw * s) / 2, 54, 0, s, s)
     end
     love.graphics.setColor(0.22, 0.14, 0.08)
-    love.graphics.print(F.choiceLabel(phase, it), x + 4, 100)
+    love.graphics.printf(F.choiceLabel(phase, it), x, 108, boxW, "center")
+  end
+  local cur = items[ritual.pick]
+  if cur then
     love.graphics.setColor(0.4, 0.3, 0.2)
-    love.graphics.print(F.choiceNote(phase, it), x + 4, 118)
+    love.graphics.printf(F.choiceNote(phase, cur), 12, 152, BOT_W - 24, "center")
   end
 end
 
@@ -375,21 +402,21 @@ function F.drawBottom(ritual, assets, ctx)
   local head = "钓鱼"
   if phase then
     if phase.kind == "brew" then
-      head = tostring(idx) .. "/" .. #F.PHASES .. " " .. phase.head .. " · " .. tostring(ritual.brewStep) .. "/4"
+      head = tostring(idx) .. "·" .. #F.PHASES .. " " .. phase.head .. " · " .. tostring(ritual.brewStep) .. "·4"
     else
-      head = tostring(idx) .. "/" .. #F.PHASES .. " " .. phase.head
+      head = tostring(idx) .. "·" .. #F.PHASES .. " " .. phase.head
     end
   end
   love.graphics.setColor(0.32, 0.22, 0.14)
   love.graphics.rectangle("fill", 6, 6, BOT_W - 12, 28)
   love.graphics.setColor(1, 0.96, 0.88)
-  love.graphics.print(head, 14, 12)
+  love.graphics.printf(head, 10, 12, BOT_W - 20, "left")
 
   if phase and phase.kind == "choice" then
     drawChoiceRow(ritual, F.catalogFor(phase), phase, assets, BOT_W)
   elseif phase and phase.kind == "confirm" then
     love.graphics.setColor(0.25, 0.18, 0.1)
-    love.graphics.print("瞄好落点，轻轻抛出去。", 40, 80)
+    love.graphics.printf("瞄好落点，轻轻抛出去。", 20, 80, BOT_W - 40, "center")
     if assets and assets.fishAnim and assets.fishAnim[1] then
       love.graphics.setColor(1, 1, 1, 1)
       love.graphics.draw(assets.fishAnim[1], 100, 100, 0, 1, 1)
@@ -399,9 +426,9 @@ function F.drawBottom(ritual, assets, ctx)
     local S = F.spots[ritual.spotI]
     local B = F.baits[ritual.baitI]
     local St = F.styles[ritual.styleI]
-    love.graphics.print((S and S.name or "?") .. " · " .. (B and B.name or "?")
-      .. " · " .. (St and St.name or "?"), 24, 70)
-    love.graphics.print("溪水轻轻响。慢慢来。", 24, 100)
+    love.graphics.printf((S and S.name or "?") .. " · " .. (B and B.name or "?")
+      .. " · " .. (St and St.name or "?"), 16, 70, BOT_W - 32, "center")
+    love.graphics.printf("溪水轻轻响。慢慢来。", 16, 100, BOT_W - 32, "center")
   end
 
   love.graphics.setColor(0.35, 0.55, 0.35)
@@ -410,7 +437,7 @@ function F.drawBottom(ritual, assets, ctx)
   local btn = "A 确认"
   if phase and phase.kind == "brew" then btn = "A 下一步"
   elseif phase and phase.kind == "confirm" then btn = "A 抛竿" end
-  love.graphics.print(btn, 128, 213)
+  love.graphics.printf(btn, 100, 213, 120, "center")
   love.graphics.setColor(0.55, 0.4, 0.35)
   love.graphics.rectangle("fill", 230, 210, 70, 22)
   love.graphics.setColor(1, 1, 1)

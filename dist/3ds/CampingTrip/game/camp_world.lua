@@ -74,6 +74,7 @@ function CampWorld.drawSplash()
 end
 
 function CampWorld.spawnFishJump()
+  if not Destinations.current().ecology.fish then return end
   local map = host.CampMap.getMap()
   local TOP_W, TOP_H, TILE = host.TOP_W, host.TOP_H, host.TILE
   local rows = TOP_H / TILE
@@ -124,10 +125,25 @@ end
 
 function CampWorld.spawnBird()
   local treeTiles = host.CampMap.getTreeTiles()
-  if #treeTiles == 0 or #critters.birds >= 3 then return end
-  local tree = treeTiles[love.math.random(#treeTiles)]
-  local gx, gy = host.CampMap.pickOpenNear(tree.x, tree.y)
-  local kind = love.math.random(0, 2)
+  local coast = Destinations.currentId() == "coast"
+  local cap = Destinations.current().ecology.birds or 0
+  if coast and Time.index() == 4 then cap = math.min(cap, 1) end
+  if #treeTiles == 0 or #critters.birds >= cap then return end
+  local tree
+  local gx, gy
+  if coast then
+    -- 海鸥停在潮线礁石并短暂落到近岸沙面，不再从内陆海岸松起飞。
+    local shorelinePerches = {
+      { x = 3, y = 4 }, { x = 7, y = 4 },
+      { x = 18, y = 4 }, { x = 22, y = 4 },
+    }
+    tree = shorelinePerches[love.math.random(#shorelinePerches)]
+    gx, gy = tree.x + (tree.x < 12 and 2 or -2), 5
+  else
+    tree = treeTiles[love.math.random(#treeTiles)]
+    gx, gy = host.CampMap.pickOpenNear(tree.x, tree.y)
+  end
+  local kind = coast and 0 or love.math.random(0, 2)
   local TILE = host.TILE
   critters.birds[#critters.birds + 1] = {
     kind = kind, state = "perch", t = 0,
@@ -140,7 +156,23 @@ function CampWorld.spawnBird()
 end
 
 function CampWorld.spawnBug()
-  if #critters.bugs >= (host.isNight() and 6 or 4) then return end
+  local pack = Destinations.current()
+  if pack.ecology.crab then
+    local crabCap = pack.ecology.crabs or 3
+    if Time.index() == 1 then crabCap = math.min(crabCap, 1)
+    elseif Time.index() ~= 4 then crabCap = math.min(crabCap, 2) end
+    if #critters.bugs >= crabCap then return end
+    local TILE = host.TILE
+    local x = love.math.random(4, 20)
+    critters.bugs[#critters.bugs + 1] = {
+      kind = "crab", t = 0, life = 6 + love.math.random() * 4,
+      ox = x * TILE + 4, oy = 4 * TILE + 8,
+      x = x * TILE + 4, y = 4 * TILE + 8,
+      vx = love.math.random() < 0.5 and -7 or 7,
+    }
+    return
+  end
+  if #critters.bugs >= (host.isNight() and 6 or (pack.ecology.bugs or 4)) then return end
   local roll = love.math.random()
   local kind = "butterfly"
   if host.isNight() and roll > 0.12 then kind = "firefly"
@@ -190,7 +222,17 @@ function CampWorld.updateCritters(dt)
       local dx, dy = b.gx * TILE + 4, b.gy * TILE + 6
       b.x = sx + (dx - sx) * p
       b.y = sy + (dy - sy) * p - math.sin(p * math.pi) * 18
-      if p >= 1 then b.state, b.t, b.hop = "hop", 0, 0 end
+      if p >= 1 then
+        b.state, b.t, b.hop = Destinations.currentId() == "coast" and "walk" or "hop", 0, 0
+      end
+    elseif b.state == "walk" then
+      -- 海鸥落地后沿潮线贴地走动；不复用林鸟的上下跳跃轨迹。
+      b.x = b.gx * TILE + 4 + b.hop * 3 * b.face
+      b.y = b.gy * TILE + 7
+      if b.t > 0.28 then
+        b.t, b.hop = 0, b.hop + 1
+        if b.hop >= 5 then b.state, b.t = "up", 0 end
+      end
     elseif b.state == "hop" then
       local p = (b.t % 0.35) / 0.35
       b.x = b.gx * TILE + 4 + b.hop * 5 * b.face
@@ -212,7 +254,11 @@ function CampWorld.updateCritters(dt)
   for i = #critters.bugs, 1, -1 do
     local u = critters.bugs[i]
     u.t = u.t + dt
-    if u.kind == "butterfly" then
+    if u.kind == "crab" then
+      u.x = u.x + u.vx * dt
+      u.y = u.oy + math.sin(u.t * 3) * 1
+      if u.x < 16 or u.x > host.TOP_W - 28 then u.vx = -u.vx end
+    elseif u.kind == "butterfly" then
       u.x = u.ox + math.sin(u.t * 2.4) * 16
       u.y = u.oy + math.cos(u.t * 1.7) * 8
     elseif u.kind == "dragonfly" then
@@ -238,7 +284,10 @@ function CampWorld.drawCritters()
         img = pack.fly and pack.fly[(math.floor(b.t * 10) % 2) + 1]
       end
       if img then
-        local sc = 2
+        local sc = Destinations.current().ecology.birdScale or 2
+        if b.state == "walk" and pack.fly then
+          img = pack.fly[(math.floor(b.t * 8) % 2) + 1]
+        end
         local sx = (b.face < 0 and -sc or sc)
         local ox = sx < 0 and img:getWidth() * sc or 0
         love.graphics.draw(img, b.x + ox, b.y, 0, sx, sc)
@@ -246,15 +295,18 @@ function CampWorld.drawCritters()
     end
   end
   for _, u in ipairs(critters.bugs) do
-    if u.kind == "firefly" then
+    if u.kind == "crab" and assets.crab then
+      local img = assets.crab[(math.floor(u.t * 5) % 2) + 1]
+      if img then love.graphics.draw(img, u.x, u.y) end
+    elseif u.kind == "firefly" then
       -- drawn in drawNightSky after tint
     elseif u.kind == "butterfly" and assets.butterfly then
       love.graphics.setColor(1, 1, 1, 1)
       local img = assets.butterfly[(math.floor(u.t * 8) % 2) + 1]
-      if img then love.graphics.draw(img, u.x, u.y, 0, 2, 2) end
+      if img then love.graphics.draw(img, u.x, u.y, 0, 1, 1) end
     elseif u.kind == "dragonfly" and assets.dragonfly then
       love.graphics.setColor(1, 1, 1, 1)
-      love.graphics.draw(assets.dragonfly, u.x, u.y, 0, 2, 2)
+      love.graphics.draw(assets.dragonfly, u.x, u.y, 0, 1, 1)
     end
   end
   love.graphics.setColor(1, 1, 1, 1)
@@ -269,6 +321,7 @@ function CampWorld.spawnMeteor()
 end
 
 function CampWorld.spawnLeaf()
+  if not Destinations.current().effects.leaves then return end
   local night = host.isNight()
   nightFX.leaves[#nightFX.leaves + 1] = {
     x = love.math.random(-10, host.TOP_W), y = love.math.random(-8, 40),
@@ -333,15 +386,23 @@ function CampWorld.drawNightSky()
     end
   end
   if host.isNight() then
+    local assets = host.Assets.get()
     for _, u in ipairs(critters.bugs) do
       if u.kind == "firefly" then
         local blink = 0.35 + 0.65 * (0.5 + 0.5 * math.sin(u.t * 7))
         local x, y = math.floor(u.x + 0.5), math.floor(u.y + 0.5)
-        love.graphics.setColor(1, 0.92, 0.45, blink * 0.35)
-        love.graphics.rectangle("fill", x - 1, y, 4, 2)
-        love.graphics.rectangle("fill", x, y - 1, 2, 4)
-        love.graphics.setColor(1, 0.98, 0.62, blink)
-        love.graphics.rectangle("fill", x, y, 2, 2)
+        local imgs = assets.firefly
+        local img = imgs and imgs[(math.floor(u.t * 6) % 2) + 1]
+        if img then
+          love.graphics.setColor(1, 1, 1, blink)
+          love.graphics.draw(img, x - img:getWidth() / 2, y - img:getHeight() / 2, 0, 1, 1)
+        else
+          love.graphics.setColor(1, 0.92, 0.45, blink * 0.35)
+          love.graphics.rectangle("fill", x - 1, y, 4, 2)
+          love.graphics.rectangle("fill", x, y - 1, 2, 4)
+          love.graphics.setColor(1, 0.98, 0.62, blink)
+          love.graphics.rectangle("fill", x, y, 2, 2)
+        end
       end
     end
   end
@@ -368,7 +429,9 @@ end
 
 function CampWorld.onEnterNight()
   nightFX.meteorT = 0.35
-  for _ = 1, 4 do CampWorld.spawnBug() end
+  if Destinations.current().effects.fireflies then
+    for _ = 1, 4 do CampWorld.spawnBug() end
+  end
 end
 
 return CampWorld

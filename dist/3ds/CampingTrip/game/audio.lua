@@ -5,7 +5,7 @@ local Audio = {}
 local host
 
 Audio.bgm = { title = nil, morning = nil, night = nil, current = nil }
-Audio.amb = { birds = nil, crickets = nil, creek = nil }
+Audio.amb = { birds = nil, crickets = nil, creek = nil, ocean = nil }
 
 local sfx = {}
 local consoleAudioRoot = "audio/3ds/"
@@ -14,6 +14,8 @@ local consoleReady = false
 
 local birdChirpT = 0
 local BIRD_CHIRP_RADIUS = 2
+local ambientSyncT = 0
+local consoleAmbient = { src = nil, playing = false, volume = nil, kind = "none" }
 
 local function assetPath(rel)
   return host and host.assetPath and host.assetPath(rel) or rel
@@ -47,8 +49,8 @@ end
 
 function Audio.loadBgm()
   local prefix = isConsole() and consoleAudioRoot or "audio/"
-  local function tryLoad(path, vol)
-    local ok, src = pcall(love.audio.newSource, assetPath(prefix .. path), "stream")
+  local function tryLoad(path, vol, sourceType)
+    local ok, src = pcall(love.audio.newSource, assetPath(prefix .. path), sourceType or "stream")
     if ok and src then
       src:setLooping(true)
       src:setVolume(vol or 0.55)
@@ -61,7 +63,9 @@ function Audio.loadBgm()
     Audio.bgm.morning = tagSrc(tryLoad("bgm_02_morning.mp3") or tryLoad("bgm_02_morning.ogg"), "morning")
     Audio.bgm.night = tagSrc(tryLoad("bgm_03_night.mp3"), "night")
     Audio.amb.creek = tryLoad("amb_creek.mp3", 0.22)
-    appendLog("audio mode=" .. consoleAudioMode .. " bgm=3 amb=creek_prox")
+    -- 真机海浪使用短 PCM 静态循环，避免并行 MP3 stream 长时间运行后锁死音频线程。
+    Audio.amb.ocean = tryLoad("amb_ocean_waves.wav", 0.18, "static")
+    appendLog("audio mode=" .. consoleAudioMode .. " bgm=3 amb=creek_prox,ocean_pcm_static")
     return
   end
 
@@ -71,6 +75,7 @@ function Audio.loadBgm()
   Audio.amb.birds = tryLoad("amb_birds.mp3", 0.22)
   Audio.amb.crickets = tryLoad("amb_crickets.mp3", 0.26)
   Audio.amb.creek = tryLoad("amb_creek.mp3", 0.16)
+  Audio.amb.ocean = tryLoad("amb_ocean_waves.ogg", 0.16)
 end
 
 function Audio.loadSfx()
@@ -142,15 +147,13 @@ function Audio.stopBgm()
 end
 
 function Audio.stopAmb()
-  if isConsole() then
-    if Audio.amb.creek and Audio.amb.creek:isPlaying() then
-      pcall(function() Audio.amb.creek:stop() end)
+  for _, src in pairs({ Audio.amb.birds, Audio.amb.crickets, Audio.amb.creek, Audio.amb.ocean }) do
+    if src then
+      if isConsole() then pcall(function() src:stop() end)
+      elseif src:isPlaying() then src:stop() end
     end
-    return
   end
-  for _, src in pairs({ Audio.amb.birds, Audio.amb.crickets, Audio.amb.creek }) do
-    if src then src:stop() end
-  end
+  consoleAmbient = { src = nil, playing = false, volume = nil, kind = "none" }
 end
 
 local function ensureAmb(src)
@@ -164,26 +167,59 @@ function Audio.syncAmbient()
     Audio.stopAmb()
     return
   end
+  local waterKind = Destinations.current().audio.water
+  local waterSrc = waterKind == "ocean" and Audio.amb.ocean or Audio.amb.creek
+  local inactiveWaterSrc = waterKind == "ocean" and Audio.amb.creek or Audio.amb.ocean
+
+  local nearW = host.playerNearWater and host.playerNearWater(2)
+  local oceanTimeGain = 0
+  if waterKind == "ocean" then
+    if Time.index() == 1 then oceanTimeGain = -0.02
+    elseif Time.index() == 4 then oceanTimeGain = 0.03 end
+  end
   if isConsole() then
-    if Audio.amb.creek then
-      if host.playerNearWater and host.playerNearWater(2) then
-        ensureAmb(Audio.amb.creek)
-      elseif Audio.amb.creek:isPlaying() then
-        pcall(function() Audio.amb.creek:stop() end)
+    local shouldPlay = waterSrc ~= nil and (waterKind == "ocean" or nearW)
+    local wantedVolume = waterKind == "ocean"
+      and ((nearW and 0.22 or 0.14) + oceanTimeGain)
+      or 0.22
+    if consoleAmbient.src ~= waterSrc then
+      if consoleAmbient.src and consoleAmbient.playing then
+        pcall(function() consoleAmbient.src:stop() end)
       end
+      consoleAmbient = { src = waterSrc, playing = false, volume = nil, kind = waterKind }
+    end
+    if shouldPlay and not consoleAmbient.playing then
+      pcall(function()
+        waterSrc:setVolume(wantedVolume)
+        waterSrc:play()
+      end)
+      consoleAmbient.playing, consoleAmbient.volume = true, wantedVolume
+      appendLog("audio ambient_start kind=" .. waterKind .. " mode=" .. (waterKind == "ocean" and "pcm_static" or "stream"))
+    elseif shouldPlay and consoleAmbient.volume ~= wantedVolume then
+      pcall(function() waterSrc:setVolume(wantedVolume) end)
+      consoleAmbient.volume = wantedVolume
+    elseif not shouldPlay and consoleAmbient.playing then
+      pcall(function() waterSrc:stop() end)
+      consoleAmbient.playing = false
+      appendLog("audio ambient_stop kind=" .. waterKind)
     end
     return
   end
-  local nearW = host.playerNearWater and host.playerNearWater(2)
+
+  if inactiveWaterSrc and inactiveWaterSrc:isPlaying() then inactiveWaterSrc:stop() end
+
   local nearB = host.playerNearBird and host.playerNearBird(3)
   local night = host.isNight and host.isNight()
-  if Audio.amb.creek then
-    if nearW then
-      Audio.amb.creek:setVolume(0.28)
-      ensureAmb(Audio.amb.creek)
+  if waterSrc then
+    if waterKind == "ocean" then
+      waterSrc:setVolume((nearW and 0.24 or 0.12) + oceanTimeGain)
+      ensureAmb(waterSrc)
+    elseif nearW then
+      waterSrc:setVolume(0.28)
+      ensureAmb(waterSrc)
     else
-      Audio.amb.creek:setVolume(0.08)
-      ensureAmb(Audio.amb.creek)
+      waterSrc:setVolume(0.08)
+      ensureAmb(waterSrc)
     end
   end
   if night then
@@ -235,9 +271,16 @@ function Audio.tick(dt, titlePulse)
     birdChirpT = 2.8 + love.math.random() * 1.5
     Audio.playSfx("bird")
   end
-  if titlePulse and math.floor(titlePulse * 2) % 2 == 0 then
+  ambientSyncT = ambientSyncT - dt
+  if ambientSyncT <= 0 then
+    ambientSyncT = 0.75
     Audio.syncAmbient()
   end
+end
+
+function Audio.debugState()
+  if not isConsole() then return "desktop" end
+  return consoleAmbient.kind .. ":" .. (consoleAmbient.playing and "playing" or "stopped")
 end
 
 function Audio.ensureConsoleLoaded()

@@ -12,6 +12,8 @@ Nintendo 3DS 上的**休闲露营小游戏**（爱好向，不上架）。
 | **[docs/游戏设计-SPEC.md](./docs/游戏设计-SPEC.md)** | 完整体验规格 + DEV 日志 |
 | **[docs/动画与交互-SPEC.md](./docs/动画与交互-SPEC.md)** | 四向精灵 / 手冲仪式 / 帐篷开合 |
 | **[docs/怎么玩.md](./docs/怎么玩.md)** | 操作说明 + Agent 自测 `love game --playtest` |
+| **[docs/故事资源图谱-SPEC.md](./docs/故事资源图谱-SPEC.md)** | 可视化故事走向、稳定资源编号与遗漏审计 |
+| **[docs/Lua-AST运行时流程提取-SPEC.md](./docs/Lua-AST运行时流程提取-SPEC.md)** | 从 Lua AST 提取真实场景、状态、跳转并与故事图对账 |
 | **[项目背景.md](./项目背景.md)** | 硬件/CFW、部署踩坑、给后续 Agent 的接续说明 |
 | `.cursor/skills/linjian-camping-3ds/` | 本项目 Agent Skill（约束与工作流） |
 | `game/` | 运行中的源码与资源（`main.lua`、`assets/`、`fonts/`） |
@@ -57,7 +59,21 @@ love game
 
 上下屏叠成 400×480。WASD / 方向键走路，点下屏背包。若 macOS 无法验证 love：系统设置 → 隐私与安全性 → 仍要打开。
 
-中文：桌面用 `game/fonts/zh-ui.ttf`；真机用系统 `chinese` 字体。新增中文文案时需扩展字体子集。
+中文：桌面用 `game/fonts/zh-ui.ttf`；真机用系统 `chinese` 字体。
+`python3 scripts/build-3ds-textures.py` 会自动扫描玩家文案、更新字体子集并验证缺字；
+也可用 `python3 scripts/build-font-subset.py --check` 单独检查。
+
+## 故事资源图谱
+
+```bash
+cd tools/story-atlas
+npm install
+npm run dev
+```
+
+本地页面可沿主线查看全部分镜，用 `SCN/BEAT/ACT/PAGE/RES` 编号搜索对象，
+对照运行时图与制作源，并在 Finder 中定位仓库内文件。`npm run scan` 会先解析
+`game/**/*.lua` 的 AST，审计代码真实跳转与人工故事图之间的差异。
 
 ## 真机（SD 卡）
 

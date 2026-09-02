@@ -1,7 +1,7 @@
 # 手冲模块 SPEC（工程）
 
 > 从属：[游戏设计-SPEC.md](./游戏设计-SPEC.md) · [动画与交互-SPEC.md](./动画与交互-SPEC.md)  
-> 状态：2026-08-31 · DEV-065  
+> 状态：2026-09-02 · DEV-108  
 > 目标：把手冲从 `main.lua` 长 `if` 链，收成**可扩展、可单测路径清晰**的独立模块。
 
 ---
@@ -101,6 +101,23 @@ LovePotion / 桌面 LÖVE：`require("drip_brew")`（与 `main.lua` 同目录）
 豆子项需带口感基底：`acid, sweet, body, bitter`。  
 滤杯/研磨/水温/冲次的修正写在 `DripBrew.computeTaste` 的**小表**（按 id），不要散落 if。
 
+上表是下屏 catalog / 兼容过程帧；TOP 成品统一读取
+`assets/previews/ritual/drip/*.png`（320×180，1:1）。preview 由 `docs/promo`
+高分辨率源直接构建；滤纸和冲次使用纯绿幕文生图 + CKE，禁止放大程序 48×48 图。
+
+### 5.1 PHASE-003/004/006 独立绿幕源
+
+- PHASE-003 的 `v60 / kalita / single / origami / metal` 各自使用
+  `docs/promo/dripper_{id}_chroma_gen_ref.png`；旧
+  `dripper_sheet_gen_ref.png` 仅保留历史参考，不再生成任何 active 手冲资源。
+- PHASE-004 使用 `docs/promo/drip_paper_chroma_gen_ref.png`，表现独立锥形滤纸。
+- PHASE-006 的真实语义是**分段注水次数**，选项为 `2 / 3 / 4`；分别使用
+  `docs/promo/drip_pours_{n}_chroma_gen_ref.png`，以水流与落点环数区分，不依赖图内数字。
+- 每个源均为 1024×1024 纯 `#00FF00` 绿幕、主体禁绿。目录 icon 由
+  `build-drip-brew-assets.py` 直接 CKE 到 48×48，四周保留 3px 安全边距；
+  TOP preview 由 `build-top-previews.py` 从同一高分源直接 CKE 到 320×180，
+  不经过目录 icon。
+
 ---
 
 ## 6. 玩法契约（与产品一致）
@@ -138,3 +155,4 @@ love game --playtest   # 须 PASS；含 rebrew=true
 | 编号 | 内容 |
 |------|------|
 | **DEV-065** | 手冲工程 SPEC + `game/drip_brew.lua` 模块化与相位表 |
+| **DEV-108** | PHASE-003/004/006 改为 9 个独立纯绿幕源；CKE 分别直出 48×48 icon 与 320×180 preview；解除旧木架组合源和程序图的 active 血缘 |

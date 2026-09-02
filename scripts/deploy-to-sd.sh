@@ -32,6 +32,7 @@ echo "== 露营之旅 deploy =="
 export COPYFILE_DISABLE=1
 
 # 1) LovePotion 3DS 会把 newImage("*.png") 映射到同名 *.t3x
+python3 "$ROOT/scripts/build-ocean-audio.py"
 python3 "$ROOT/scripts/build-camp-static-base.py"
 python3 "$ROOT/scripts/build-3ds-textures.py"
 
@@ -115,6 +116,9 @@ echo "完成。"
 VERIFY=("$ROOT/scripts/verify-3ds-install.py")
 if [[ -d "$SD_ROOT" ]]; then
   VERIFY+=(--require-sd)
+fi
+if [[ "$DO_CIA" -eq 1 ]]; then
+  VERIFY+=(--allow-cia-experiment)
 fi
 echo
 if ! python3 "${VERIFY[@]}"; then

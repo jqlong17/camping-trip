@@ -20,6 +20,30 @@ SIP_STEPS = (
     (3, "cup_sip_3_mug_rest_gen.png"),
 )
 
+ASSET_PROVENANCE = [
+    {
+        "outputs": "game/assets/ritual/cup/focus_{id}.png",
+        "sources": "docs/promo/cup_focus_{id}_gen_ref.png",
+        "variants": {"id": ["nose", "mouth", "after"]},
+        "operation": "background_key + crop + resize + quantize",
+    },
+    {
+        "outputs": "game/assets/ritual/cup/sip_1.png",
+        "sources": "docs/promo/cup_sip_1_mug_raise_gen_ref.png",
+        "operation": "cover_crop + resize + quantize",
+    },
+    {
+        "outputs": "game/assets/ritual/cup/sip_2.png",
+        "sources": "docs/promo/cup_sip_2_mug_drink_gen_ref.png",
+        "operation": "cover_crop + resize + quantize",
+    },
+    {
+        "outputs": "game/assets/ritual/cup/sip_3.png",
+        "sources": "docs/promo/cup_sip_3_mug_rest_gen_ref.png",
+        "operation": "cover_crop + resize + quantize",
+    },
+]
+
 
 def kill_cream(im: Image.Image, thr: int = 228) -> Image.Image:
     a = np.array(im.convert("RGBA"))

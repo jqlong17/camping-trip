@@ -14,6 +14,7 @@ function CampRender.drawPlayTop()
   love.graphics.setColor(0.15, 0.18, 0.14)
   love.graphics.rectangle("fill", 0, 0, host.TOP_W, host.TOP_H)
   local cols, rows = host.TOP_W / host.TILE, host.TOP_H / host.TILE
+  local assets = host.Assets.get()
   local canvas = host.CampTiles.getCanvas()
   if canvas then
     love.graphics.setColor(1, 1, 1, 1)
@@ -21,12 +22,22 @@ function CampRender.drawPlayTop()
   else
     host.CampTiles.drawCampGroundLayer(cols, rows)
   end
+  if Destinations.currentId() == "coast" then
+    local oceanOverlay = Time.index() == 1 and assets.coastOceanSunrise
+      or (Time.index() == 4 and assets.coastOceanSunset)
+    if oceanOverlay then
+      love.graphics.setColor(1, 1, 1, 1)
+      love.graphics.draw(oceanOverlay, 0, 0)
+    end
+  elseif assets.forestDistantCanopy then
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.draw(assets.forestDistantCanopy, 0, 0)
+  end
   host.CampTiles.drawCreekLite()
   host.CampTiles.drawFruitOverlays()
 
   local firepit = host.CampMap.getFirepit()
   local propRows = host.CampMap.getPropRows()
-  local assets = host.Assets.get()
   local TILE = host.TILE
   local player = host.getPlayer()
 
@@ -45,6 +56,8 @@ function CampRender.drawPlayTop()
         end
       end
     end
+    -- 脚点 Y-sort：帐篷锚点在底边所在行。同排先画人物再画帐篷，
+    -- 因此人在后方/同排会被布面遮住；走到下一行则随后绘制并显示在前。
     if y == player.y then host.drawPlayerAt(player.x * TILE, player.y * TILE) end
     for _, s in ipairs(propRows[y] or {}) do
       host.CampTiles.drawProp(s.t, s.x * TILE, s.y * TILE, s.x, s.y)
@@ -63,7 +76,7 @@ function CampRender.drawPlayTop()
   love.graphics.rectangle("fill", 0, 0, host.TOP_W, host.TOP_H)
   host.CampWorld.drawNightSky()
 
-  local title = "露营"
+  local title = Destinations.current().shortName
   if host.getTentOpen() then title = title .. " · 帐" end
   if host.getLanternOn() then title = title .. " · 火" end
   if host.uiFont then love.graphics.setFont(host.uiFont) end

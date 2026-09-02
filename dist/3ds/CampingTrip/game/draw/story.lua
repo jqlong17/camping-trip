@@ -24,6 +24,8 @@ function StoryDraw.storyTop(imgKey, line)
     local spots = {
       d1 = { x = 188, y = 98, facing = 0 },
       d2 = { x = 164, y = 100, facing = 1 },
+      depart = { x = 182, y = 130, facing = 0 },
+      arrive = { x = 168, y = 124, facing = 1 },
     }
     local spot = spots[imgKey] or spots.d2
     local scale = 28 / 40
@@ -56,6 +58,43 @@ function StoryDraw.storyTop(imgKey, line)
   love.graphics.print(hint, R.TOP_W - width - 18, boxY + 4)
 end
 
+function StoryDraw.destinationTop()
+  local id = State.destination.ids[State.destination.i] or "forest"
+  local pack = Destinations.get(id)
+  local img = Assets.ensureTopPreview(pack.preview)
+  love.graphics.setColor(0.12, 0.18, 0.20)
+  love.graphics.rectangle("fill", 0, 0, R.TOP_W, R.TOP_H)
+  if img then Assets.drawFitted(img, 40, 16, 320, 180, 1, 1) end
+  love.graphics.setColor(0.06, 0.08, 0.10, 0.86)
+  love.graphics.rectangle("fill", 40, 196, 320, 30)
+  love.graphics.setColor(1, 0.95, 0.82)
+  love.graphics.printf(pack.name, 40, 202, 320, "center")
+  StoryDraw.toast()
+end
+
+function StoryDraw.destinationBottom()
+  love.graphics.setColor(0.92, 0.86, 0.72)
+  love.graphics.rectangle("fill", 0, 0, R.BOT_W, R.BOT_H)
+  love.graphics.setColor(0.24, 0.16, 0.10)
+  love.graphics.print("这次去哪里？", 16, 18)
+  for i, pack in ipairs(Destinations.all()) do
+    local x = i == 1 and 16 or 164
+    local selected = i == State.destination.i
+    love.graphics.setColor(selected and 0.98 or 0.86, selected and 0.86 or 0.82, selected and 0.48 or 0.70)
+    love.graphics.rectangle("fill", x, 56, 140, 116)
+    love.graphics.setColor(0.30, 0.20, 0.12)
+    love.graphics.rectangle("line", x, 56, 140, 116)
+    love.graphics.printf(pack.name, x + 4, 78, 132, "center")
+    love.graphics.setColor(0.40, 0.30, 0.18)
+    local note = pack.id == "coast" and "沙滩 · 海浪 · 海鸟" or "小溪 · 树影 · 萤火虫"
+    love.graphics.printf(note, x + 8, 112, 124, "center")
+  end
+  love.graphics.setColor(0.35, 0.55, 0.35)
+  love.graphics.rectangle("fill", 100, 204, 120, 24)
+  love.graphics.setColor(1, 1, 1)
+  love.graphics.print("A 确认目的地", 112, 208)
+end
+
 function StoryDraw.storyBottom(hint)
   love.graphics.setColor(0.18, 0.14, 0.10)
   love.graphics.rectangle("fill", 0, 0, R.BOT_W, R.BOT_H)
@@ -69,12 +108,17 @@ end
 function StoryDraw.castTop()
   love.graphics.setColor(0.15, 0.18, 0.14)
   love.graphics.rectangle("fill", 0, 0, R.TOP_W, R.TOP_H)
-  local img = Assets.ensureCast(State.cast.i)
+  local preview = Assets.ensureCastPreview and Assets.ensureCastPreview(State.cast.i)
+  local img = preview or Assets.ensureCast(State.cast.i)
   if img then
-    local iw, ih = img:getWidth(), img:getHeight()
-    local scale = math.max(1, math.floor(160 / math.max(ih, 1)))
     love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.draw(img, math.floor((R.TOP_W - iw * scale) / 2), 28, 0, scale, scale)
+    if preview then
+      Assets.drawFitted(img, math.floor((R.TOP_W - 320) / 2), 16, 320, 180, 1, 1)
+    else
+      local iw, ih = img:getWidth(), img:getHeight()
+      local scale = math.max(1, math.floor(160 / math.max(ih, 1)))
+      love.graphics.draw(img, math.floor((R.TOP_W - iw * scale) / 2), 28, 0, scale, scale)
+    end
   end
   if R.uiFont then love.graphics.setFont(R.uiFont) end
   local name = State.cast.names[State.cast.i] or ("角色" .. State.cast.i)
@@ -121,98 +165,142 @@ function StoryDraw.diaryTop()
   local desk = Assets.ensureStory("diary_desk") or Assets.ensureStory("diary")
   if desk then Assets.drawFitted(desk, 0, 0, R.TOP_W, R.TOP_H) end
 
+  -- 手帐本固定内容区 120×210（真机纹理可能更大）
   local tn = Assets.ensureStory("diary_tn")
-  local tnX, tnY, tnW, tnH = 72, 16, 110, 200
+  local tnW, tnH = 120, 210
+  local tnX = math.floor((R.TOP_W - tnW) / 2 - 28)
+  local tnY = math.floor((R.TOP_H - tnH) / 2)
   if tn then
-    tnW, tnH = tn:getWidth(), tn:getHeight()
-    tnX = math.floor((R.TOP_W - tnW) / 2 - 28)
-    tnY = math.floor((R.TOP_H - tnH) / 2)
-    love.graphics.draw(tn, tnX, tnY)
+    if Assets.drawFitted then
+      Assets.drawFitted(tn, tnX, tnY, tnW, tnH, 1, 1)
+    else
+      love.graphics.draw(tn, tnX, tnY)
+    end
   end
 
-  if R.uiFont then love.graphics.setFont(R.uiFont) end
-  -- Ink on left page — single-line truncate (no wrap columns on narrow page)
-  local inkX = tnX + 10
-  local inkY = tnY + 24
-  local inkW = math.max(36, math.floor(tnW / 2) - 14)
-  local function inkLine(text, yy)
-    local s = text
-    if R.uiFont then
-      local utf8 = rawget(_G, "utf8") or require("utf8")
-      while #s > 0 and R.uiFont:getWidth(s) > inkW do
-        local off = utf8.offset(s, -1)
-        if not off or off <= 1 then break end
-        s = s:sub(1, off - 1)
+  -- 上屏只营造“写过日记”的感觉：细小像素笔迹，不承担真实文字阅读。
+  local inkX, inkY = tnX + 9, tnY + 31
+  local strokes = {
+    { 8, 5, 9, 4 }, { 13, 3, 7, 7 }, { 6, 8, 5, 6 },
+    { 11, 6, 8, 3 }, { 7, 4, 12, 3 }, { 14, 5, 5, 5 },
+    { 9, 7, 6, 6 }, { 5, 5, 10, 8 }, { 12, 4, 7, 4 },
+  }
+  love.graphics.setColor(0.18, 0.13, 0.09, 0.72)
+  for row, parts in ipairs(strokes) do
+    local x = inkX + ((row * 3) % 5)
+    local y = inkY + (row - 1) * 12
+    for i, len in ipairs(parts) do
+      love.graphics.rectangle("fill", x, y + ((row + i) % 2), len, 1)
+      if (row + i) % 3 == 0 then
+        love.graphics.rectangle("fill", x + 2, y + 2, math.max(2, len - 3), 1)
       end
-      if s ~= text and #s > 0 then s = s .. "…" end
+      x = x + len + 2
     end
-    love.graphics.setColor(0.12, 0.09, 0.06, 1)
-    love.graphics.print(s, inkX, yy)
-  end
-  inkLine("周末手帐", inkY)
-  local y = inkY + 16
-  for _, line in ipairs(GearPlay.diaryTripLines()) do
-    inkLine(line, y)
-    y = y + 13
-    if y > tnY + tnH - 40 then break end
   end
 
-  -- Photo taped on right page (walk sprite, no white portrait plate)
-  local walk = Assets.ensureWalk(R.player.castId)
-  local px = tnX + math.floor(tnW * 0.54)
-  local py = tnY + math.floor(tnH * 0.38)
-  local pw, ph = 44, 50
-  love.graphics.setColor(0.95, 0.91, 0.82, 1)
-  love.graphics.rectangle("fill", px - 2, py - 2, pw + 4, ph + 4)
-  love.graphics.setColor(0.48, 0.36, 0.24, 1)
-  love.graphics.rectangle("line", px - 2, py - 2, pw + 4, ph + 4)
-  love.graphics.setScissor(px, py, pw, ph)
-  love.graphics.setColor(1, 1, 1, 1)
-  if walk and walk.sheet and walk.quads and walk.quads[0] and walk.quads[0][0] then
-    local sc = math.min(pw / 40, ph / 40) * 1.05
-    love.graphics.draw(walk.sheet, walk.quads[0][0], px + (pw - 40 * sc) / 2, py + (ph - 40 * sc) / 2, 0, sc, sc)
+end
+
+function StoryDraw.diaryPages()
+  local haul = State.trip.haul or {}
+  local fish = (Persist.fishTotalOf and Persist.fishTotalOf(haul.fish)) or 0
+
+  local coast = State.trip.destinationId == "coast"
+  local first = coast
+    and "把帐篷展开在海边以后，浪声把一路的疲惫都带走了。"
+    or "把帐篷展开在林间以后，心也慢慢安静了下来。"
+  if (haul.coffee or 0) > 0 and (haul.tea or 0) > 0 then
+    first = first .. "咖啡和茶的香气轮流升起，时间好像走得更慢了。"
+  elseif (haul.coffee or 0) > 0 then
+    first = first .. "热水绕过咖啡粉时，林子里多了一阵温暖的香气。"
+  elseif (haul.tea or 0) > 0 then
+    first = first .. "茶汤暖起来时，溪水声也显得格外清亮。"
   else
-    local castImg = Assets.ensureCast(R.player.castId)
-    if castImg then
-      local iw, ih = castImg:getWidth(), castImg:getHeight()
-      local sc = math.min(pw / iw, ph / ih)
-      love.graphics.draw(castImg, px + (pw - iw * sc) / 2, py + (ph - ih * sc) / 2, 0, sc, sc)
-    end
+    first = first .. (coast and "什么都不赶，只听浪一遍遍靠岸。" or "什么都不赶，只听风从树梢经过。")
   end
-  love.graphics.setScissor()
 
-  love.graphics.setColor(0.30, 0.22, 0.14, 0.92)
-  local hint = "A 合上保存"
-  local hw = R.uiFont and R.uiFont:getWidth(hint) or 72
-  love.graphics.print(hint, R.TOP_W - hw - 12, R.TOP_H - 18)
+  local second
+  if (haul.meals or 0) > 0 then
+    second = "热饭出锅的那一刻，突然觉得今天已经很圆满。"
+  else
+    second = coast and "坐在潮线外发了一会儿呆，海风把下午吹得很长。"
+      or "坐在溪边发了一会儿呆，原来安静也能装满一个下午。"
+  end
+  if fish > 0 then
+    second = second .. "溪水还送来了一份小小的惊喜。"
+  elseif FishRod.mood then
+    second = second .. "鱼最后留在溪水里，也算彼此打了个招呼。"
+  elseif (haul.fruit or 0) > 0 then
+    second = second .. "路过树下时，还收下了林子送的小礼物。"
+  end
+
+  local third
+  if fish == 0 and FishRod.mood then
+    third = "下次还想坐回这段溪边，换个耐心一点的下午，看看会不会等到那条鱼。"
+  elseif (haul.coffee or 0) > 0 then
+    third = "下次想换一种豆子，再早一点出发。也许晨雾里的第一杯，会有完全不同的味道。"
+  elseif (haul.tea or 0) > 0 then
+    third = "下次带另一种茶来，也给风和溪水留一杯。"
+  else
+    third = coast and "下次还来，想再看一次海上的日出。" or "下次还来。也许不需要计划，只要再把周末还给自己。"
+  end
+
+  return {
+    { title = "这次的周末", body = first },
+    { title = "记住这一刻", body = second },
+    { title = "下次再来", body = third },
+  }
 end
 
 function StoryDraw.diaryBottom()
   love.graphics.setColor(0.16, 0.12, 0.09)
   love.graphics.rectangle("fill", 0, 0, R.BOT_W, R.BOT_H)
-  -- note card
   love.graphics.setColor(0.93, 0.88, 0.74)
-  love.graphics.rectangle("fill", 20, 36, R.BOT_W - 40, 150)
+  love.graphics.rectangle("fill", 12, 24, R.BOT_W - 24, 176)
   love.graphics.setColor(0.55, 0.42, 0.28)
-  love.graphics.rectangle("line", 20, 36, R.BOT_W - 40, 150)
+  love.graphics.rectangle("line", 12, 24, R.BOT_W - 24, 176)
   if R.uiFont then love.graphics.setFont(R.uiFont) end
+
+  local pages = StoryDraw.diaryPages()
+  local pageIndex = math.max(1, math.min(#pages, R.diaryPage or 1))
+  local page = pages[pageIndex]
   love.graphics.setColor(0.22, 0.14, 0.08)
-  love.graphics.print("本趟写进手帐了", 36, 52)
-  local haul = State.trip.haul or {}
-  love.graphics.print(string.format(
-    "果 %d · 鱼 %d · 咖啡 %d · 茶 %d",
-    haul.fruit or 0,
-    (Persist.fishTotalOf and Persist.fishTotalOf(haul.fish)) or 0,
-    haul.coffee or 0,
-    haul.tea or 0
-  ), 36, 78)
-  local save, totals = State.save.data, State.save.data.totals or {}
-  love.graphics.print(string.format(
-    "累计 · 露营%d次 · 果%d · 鱼%d · 咖啡%d",
-    save.trips or 0, totals.fruit or 0, totals.fishTotal or 0, totals.coffee or 0
-  ), 36, 108)
+  love.graphics.printf(page.title, 32, 42, R.BOT_W - 64, "center")
+  love.graphics.setColor(0.31, 0.22, 0.14)
+  love.graphics.printf(page.body, 34, 72, R.BOT_W - 68, "left")
+
   love.graphics.setColor(0.45, 0.32, 0.18)
-  love.graphics.print("按 A 保存并回标题", 36, 148)
+  love.graphics.print(pageIndex > 1 and "< 上一页" or "  上一页", 20, 214)
+  love.graphics.print("A 保存", 132, 214)
+  love.graphics.print(pageIndex < #pages and "下一页 >" or "下一页  ", 232, 214)
+  love.graphics.printf(pageIndex .. "/" .. #pages, 0, 184, R.BOT_W, "center")
+end
+
+--- 供 playtest：三页齐全、无流水账数字，且日记上屏不叠角色。
+function StoryDraw.diaryAudit()
+  local report = {
+    ok = true,
+    issues = {},
+    pages = StoryDraw.diaryPages(),
+    characterOverlay = false,
+  }
+  local desk = Assets.ensureStory("diary_desk") or Assets.ensureStory("diary")
+  local tn = Assets.ensureStory("diary_tn")
+  if not desk then report.issues[#report.issues + 1] = "missing_diary_desk" end
+  if not tn then report.issues[#report.issues + 1] = "missing_diary_tn" end
+  if #report.pages ~= 3 then report.issues[#report.issues + 1] = "page_count:" .. #report.pages end
+
+  for i, page in ipairs(report.pages) do
+    if not page.title or page.title == "" then
+      report.issues[#report.issues + 1] = "missing_title:" .. i
+    end
+    if not page.body or #page.body < 18 then
+      report.issues[#report.issues + 1] = "body_too_short:" .. i
+    elseif page.body:find("%d") then
+      report.issues[#report.issues + 1] = "ledger_number:" .. i
+    end
+  end
+  report.ok = #report.issues == 0
+  return report
 end
 
 return StoryDraw

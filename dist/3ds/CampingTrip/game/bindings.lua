@@ -97,6 +97,7 @@ function Bindings.bind()
     ensureCast = Assets.ensureCast,
     ensureWalk = Assets.ensureWalk,
     ensureRitual = Assets.ensureRitual,
+    spawnSplash = CampWorld.spawnSplash,
   }
   Session.bindHost(helpers)
   Flow.bindHost(helpers)
@@ -107,6 +108,7 @@ function Bindings.bind()
     confirmMenu = Flow.confirmMenu,
     advancePrologue = Flow.advancePrologue,
     confirmCast = Flow.confirmCast,
+    confirmDestination = Flow.confirmDestination,
     advanceDepart = Flow.advanceDepart,
     tryMove = Session.tryMove,
     tryUseGear = Session.tryUseGear,

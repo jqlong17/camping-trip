@@ -25,6 +25,7 @@ local AP = {
 }
 
 local HOME_STORY = { h1 = true, diary = true, diary_desk = true, diary_tn = true }
+local PROLOGUE_STORY = { p1 = true, p2 = true, p3 = true }
 
 function AP.cupPath(file)
   return "assets/cups/" .. file
@@ -62,11 +63,22 @@ function AP.forestWorld(name)
   return "assets/scenes/forest/world/" .. name
 end
 
+function AP.sceneCamp(name)
+  return Destinations.scenePath("camp", name)
+end
+
+function AP.sceneWorld(name)
+  return Destinations.scenePath("world", name)
+end
+
 function AP.story(key)
   if HOME_STORY[key] then
     return "assets/scenes/home/story/" .. key .. ".png"
   end
-  return "assets/scenes/forest/story/" .. key .. ".png"
+  if PROLOGUE_STORY[key] then
+    return "assets/scenes/forest/story/" .. key .. ".png"
+  end
+  return Destinations.scenePath("story", key .. ".png")
 end
 
 return AP

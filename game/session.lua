@@ -18,7 +18,9 @@ function Session.bindHost(h)
     ensureRitual = h.ensureRitual,
     playerXY = function() return R.player.x, R.player.y end,
     tileAt = CampMap.tileAt,
+    isWater = CampMap.isWater,
     walkable = CampMap.walkable,
+    canPitchTent = CampMap.canPitchTent,
     getMap = CampMap.getMap,
     getFruitTrees = function() return State.trip.fruitTrees end,
     getHaul = function() return State.trip.haul end,
@@ -185,6 +187,9 @@ function Session.tryMove(dx, dy)
     R.player.walkFrame = R.player.walkFrame == 1 and 2 or 1
     R.player.idleT = 0.28
     Audio.playSfx("step")
+    if CampMap.isWater(CampMap.tileAt(nx, ny)) and host and host.spawnSplash then
+      host.spawnSplash(nx, ny)
+    end
   end
   if dx ~= 0 or dy ~= 0 then
     if math.abs(dx) > math.abs(dy) then R.player.facing = dx > 0 and 2 or 1

@@ -31,6 +31,10 @@
 | `ritual/cup/sip_1..3.png` | 抬杯→入口→放下；**160×120**；**无人物**（只拍杯子，避免性别不一致） |
 | 既有 `cups/cup_01..09` | 杯型 |
 
+上屏使用独立 `assets/previews/ritual/cup/focus_*.png` 与 `sip_*.png`
+（320×180）；48×48 focus 仅用于下屏 catalog，160×120 sip 仅作兼容资源，二者
+均不得放大充当 TOP 成品。preview 直接由对应 `docs/promo/*_gen_ref.png` 构建。
+
 ---
 
 ## 4. 验收

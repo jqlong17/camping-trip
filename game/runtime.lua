@@ -6,7 +6,7 @@ local Runtime = {
   BOT_W = 320,
   BOT_H = 240,
   TILE = 16,
-  buildId = "2026-08-31-dev092-tent-grounded",
+  buildId = "2026-09-02-destination-pack-coast",
 }
 
 Runtime.isConsole = love.system.getOS() == "Horizon" or love.system.getOS() == "3DS"
@@ -17,8 +17,10 @@ Runtime.cheapWindFx = Runtime.isConsole or not Runtime.staticPlayFx
 Runtime.critterFx = (not Runtime.staticPlayFx) or Runtime.isConsole or os.getenv("LINJIAN_CRITTER_FX") == "1"
 
 Runtime.scene = "title"
+Runtime.destinationId = "forest"
 Runtime.quitConfirm = false
 Runtime.quitConfirmChoice = 1 -- 1=留下 2=返回标题
+Runtime.diaryPage = 1
 Runtime.titlePulse = 0
 Runtime.waterPhase = 0
 Runtime.menuIndex = 1

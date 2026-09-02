@@ -103,7 +103,7 @@ function GearPlay.nearCreek()
   local px, py = H.playerXY()
   for _, d in ipairs({ {0, 0}, {1, 0}, {-1, 0}, {0, 1}, {0, -1} }) do
     local t = H.tileAt(px + d[1], py + d[2])
-    if t == 2 or t == 8 then return true end
+    if H.isWater(t) then return true end
   end
   return false
 end
@@ -150,6 +150,7 @@ function GearPlay.setTentMap(on)
   if on then
     local px, py = H.playerXY()
     if not H.walkable(px, py) then return false end
+    if H.canPitchTent and not H.canPitchTent(px, py) then return false end
     local ground = (m[py] and m[py][px]) or 7
     if ground == 5 then ground = 7 end
     H.setTentPos(px, py, ground)
@@ -248,7 +249,7 @@ function GearPlay.tryUseGear()
     TeaBrew.start()
   elseif g.id == "rod" then
     if GearPlay.nearCreek() then FishRod.start()
-    else H.say("去小溪边再试试。", 2.5) end
+    else H.say(Destinations.currentId() == "coast" and "去浪边再试试。" or "去小溪边再试试。", 2.5) end
   elseif g.id == "cup" then
     H.drinkFromCup()
   elseif g.id == "cook" then

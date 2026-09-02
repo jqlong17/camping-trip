@@ -47,6 +47,7 @@ function PlayDraw.ritualOverlay()
   local context = {
     TOP_W = R.TOP_W, TOP_H = R.TOP_H, BOT_W = R.BOT_W,
     uiFont = R.uiFont, drawFitted = Assets.drawFitted,
+    loadTopPreview = Assets.ensureTopPreview,
   }
   local assets = Assets.get().ritual
   if ritual.kind == "drip" then DripBrew.drawTop(ritual, assets, context); return end

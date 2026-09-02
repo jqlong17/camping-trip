@@ -28,6 +28,24 @@ CUP_DEFS = [
     ("cup_09_glass", "硝子咖啡", "coffee"),
 ]
 
+ASSET_PROVENANCE = [
+    {
+        "outputs": "game/assets/cups/{id}.png",
+        "sources": "docs/promo/cups_sheet_gen_ref.png",
+        "variants": {"id": [
+            "cup_01_hakuji", "cup_02_aoguma", "cup_03_kozara",
+            "cup_04_sumi", "cup_05_beni", "cup_06_matcha",
+            "cup_07_enamel", "cup_08_take", "cup_09_glass",
+        ]},
+        "operation": "slice_runs + crop + resize + quantize",
+    },
+    {
+        "outputs": "game/assets/gear/cup.png",
+        "sources": "docs/promo/cups_sheet_gen_ref.png",
+        "operation": "slice_first + crop + resize + quantize",
+    },
+]
+
 
 def quantize_rgba(im: Image.Image, colors: int = 24) -> Image.Image:
     rgba = im.convert("RGBA")
@@ -111,11 +129,15 @@ def save(path: Path, im: Image.Image) -> None:
 
 
 def main() -> int:
-    if not GEN.is_file():
-        raise SystemExit(f"missing gen sheet: {GEN}\n  run GenerateImage first → cups_sheet_gen.png")
-    src = Image.open(GEN).convert("RGBA")
     PROMO.mkdir(parents=True, exist_ok=True)
-    src.save(PROMO / "cups_sheet_gen_ref.png")
+    repo_source = PROMO / "cups_sheet_gen_ref.png"
+    if repo_source.is_file():
+        src = Image.open(repo_source).convert("RGBA")
+    elif GEN.is_file():
+        src = Image.open(GEN).convert("RGBA")
+        src.save(repo_source)
+    else:
+        raise SystemExit(f"missing source: {repo_source} or {GEN}")
     print(f"promo ref → {PROMO / 'cups_sheet_gen_ref.png'}")
 
     parts = slice_runs(src)

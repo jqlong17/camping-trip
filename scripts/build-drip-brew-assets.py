@@ -1,21 +1,93 @@
 #!/usr/bin/env python3
-"""Build drip-brew pixel icons from gen sheets + procedural pours/paper markers."""
+"""Build drip-brew pixel icons from authored generation sources."""
 from __future__ import annotations
 
 from pathlib import Path
 
 import numpy as np
 from PIL import Image
+from gen_slice_common import chroma_key_fit
 
 ROOT = Path(__file__).resolve().parents[1]
 ASSETS = ROOT / "game" / "assets"
 RITUAL = ASSETS / "ritual"
 PROMO = ROOT / "docs" / "promo"
-GEN_DRIP = Path("/Users/ruska/.cursor/projects/Users-ruska-projects-3ds/assets/dripper_sheet_gen.png")
 GEN_BEAN = Path("/Users/ruska/.cursor/projects/Users-ruska-projects-3ds/assets/coffee_beans_sheet_gen.png")
 
 DRIPPER_IDS = ["v60", "kalita", "single", "origami", "metal"]
 BEAN_IDS = ["ethiopia", "peru", "colombia", "kenya", "brazil"]
+DRIPPER_SOURCES = {
+    item: f"dripper_{item}_chroma_gen_ref.png" for item in DRIPPER_IDS
+}
+PAPER_SOURCE = "drip_paper_chroma_gen_ref.png"
+POUR_SOURCES = {
+    n: f"drip_pours_{n}_chroma_gen_ref.png" for n in (2, 3, 4)
+}
+
+ASSET_PROVENANCE = [
+    {
+        "outputs": ["game/assets/ritual/drip/bean_*.png"],
+        "sources": ["docs/promo/coffee_beans_sheet_gen_ref.png"],
+        "operation": "slice_runs + crop + resize + quantize",
+    },
+    {
+        "outputs": "game/assets/ritual/drip/dripper_{id}.png",
+        "sources": "docs/promo/dripper_{id}_chroma_gen_ref.png",
+        "variants": {"id": ["v60", "kalita", "single", "origami", "metal"]},
+        "operation": "CKE chroma_key_fit + contain_resize_48x48 + 3px_safety_margin + quantize",
+    },
+    {
+        "outputs": ["game/assets/ritual/drip/grind_fine.png"],
+        "sources": ["docs/promo/drip_grind_fine_gen_ref.png"],
+        "operation": "chroma_key + crop + resize + quantize",
+    },
+    {
+        "outputs": ["game/assets/ritual/drip/grind_medium.png"],
+        "sources": ["docs/promo/drip_grind_medium_gen_ref.png"],
+        "operation": "chroma_key + crop + resize + quantize",
+    },
+    {
+        "outputs": ["game/assets/ritual/drip/grind_coarse.png"],
+        "sources": ["docs/promo/drip_grind_coarse_gen_ref.png"],
+        "operation": "chroma_key + crop + resize + quantize",
+    },
+    {
+        "outputs": ["game/assets/ritual/drip/temp_92.png"],
+        "sources": ["docs/promo/drip_temp_92_gen_ref.png"],
+        "operation": "background_key + crop + resize + quantize",
+    },
+    {
+        "outputs": ["game/assets/ritual/drip/temp_100.png"],
+        "sources": ["docs/promo/drip_temp_100_gen_ref.png"],
+        "operation": "background_key + crop + resize + quantize",
+    },
+    {
+        "outputs": ["game/assets/ritual/drip/drip_1.png"],
+        "sources": ["docs/promo/drip_pixel_1.png"],
+        "operation": "cover_crop + resize + quantize",
+    },
+    {
+        "outputs": ["game/assets/ritual/drip/drip_2.png"],
+        "sources": ["docs/promo/drip_pixel_2.png"],
+        "operation": "cover_crop + resize + quantize",
+    },
+    {
+        "outputs": ["game/assets/ritual/drip/drip_3.png"],
+        "sources": ["docs/promo/drip_pixel_3.png"],
+        "operation": "cover_crop + resize + quantize",
+    },
+    {
+        "outputs": ["game/assets/ritual/drip/drip_paper.png"],
+        "sources": ["docs/promo/drip_paper_chroma_gen_ref.png"],
+        "operation": "CKE chroma_key_fit + contain_resize_48x48 + 3px_safety_margin + quantize",
+    },
+    {
+        "outputs": "game/assets/ritual/drip/pours_{id}.png",
+        "sources": "docs/promo/drip_pours_{id}_chroma_gen_ref.png",
+        "variants": {"id": [2, 3, 4]},
+        "operation": "CKE chroma_key_fit + contain_resize_48x48 + 3px_safety_margin + quantize",
+    },
+]
 
 
 def quantize_rgba(im: Image.Image, colors: int = 28) -> Image.Image:
@@ -56,6 +128,19 @@ def save(rel: str, im: Image.Image) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     im.save(path)
     print(f"  {path.relative_to(ROOT)} {im.size}")
+
+
+def load_editable_source(external: Path, repo_name: str) -> Image.Image:
+    """仓库内 gen_ref 是可编辑权威源；仅首次缺失时从外部生成记录导入。"""
+    PROMO.mkdir(parents=True, exist_ok=True)
+    repo_source = PROMO / repo_name
+    if repo_source.is_file():
+        return Image.open(repo_source).convert("RGBA")
+    if not external.is_file():
+        raise FileNotFoundError(f"missing source: {repo_source} or {external}")
+    image = Image.open(external).convert("RGBA")
+    image.save(repo_source)
+    return image
 
 
 def slice_equal(im: Image.Image, n: int, pad: float = 0.02) -> list[Image.Image]:
@@ -105,19 +190,16 @@ def slice_runs(im: Image.Image) -> list[Image.Image]:
 
 
 def build_drippers() -> None:
-    src = Image.open(GEN_DRIP).convert("RGBA")
-    PROMO.mkdir(parents=True, exist_ok=True)
-    src.save(PROMO / "dripper_sheet_gen_ref.png")
-    parts = slice_equal(src, 5)
-    for i, pid in enumerate(DRIPPER_IDS):
-        icon = hard_fit(parts[i], 48, 48, 26)
+    for pid in DRIPPER_IDS:
+        src = PROMO / DRIPPER_SOURCES[pid]
+        if not src.is_file():
+            raise FileNotFoundError(f"missing independent dripper source: {src}")
+        icon = chroma_key_fit(Image.open(src), 48, 48, 26, margin=3)
         save(f"ritual/dripper_{pid}.png", icon)
 
 
 def build_beans() -> None:
-    src = Image.open(GEN_BEAN).convert("RGBA")
-    PROMO.mkdir(parents=True, exist_ok=True)
-    src.save(PROMO / "coffee_beans_sheet_gen_ref.png")
+    src = load_editable_source(GEN_BEAN, "coffee_beans_sheet_gen_ref.png")
     parts = slice_runs(src)
     if len(parts) < 5:
         parts = slice_equal(src, 5)
@@ -164,10 +246,7 @@ def draw_grind_icons() -> None:
     PROMO.mkdir(parents=True, exist_ok=True)
     for name in ("fine", "medium", "coarse"):
         gen = assets_dir / f"drip_grind_{name}_gen.png"
-        if not gen.is_file():
-            raise FileNotFoundError(f"missing grind gen: {gen}")
-        raw = Image.open(gen).convert("RGBA")
-        raw.save(PROMO / f"drip_grind_{name}_gen_ref.png")
+        raw = load_editable_source(gen, f"drip_grind_{name}_gen_ref.png")
         keyed = kill_chroma_green(raw)
         # drop leftover cream card if gen put subject on a paper square
         a = np.array(keyed)
@@ -217,53 +296,32 @@ def draw_temp_icons() -> None:
     PROMO.mkdir(parents=True, exist_ok=True)
     for name in ("92", "100"):
         gen = assets_dir / f"drip_temp_{name}_gen.png"
-        if not gen.is_file():
-            raise FileNotFoundError(f"missing temp gen: {gen}")
-        raw = Image.open(gen).convert("RGBA")
-        raw.save(PROMO / f"drip_temp_{name}_gen_ref.png")
+        raw = load_editable_source(gen, f"drip_temp_{name}_gen_ref.png")
         icon = hard_fit(kill_cream_bg(raw), 48, 48, 26)
         # reinforce alpha if cream bleed survived hard_fit upsample
         icon = kill_cream_bg(icon, thr=232)
         save(f"ritual/temp_{name}.png", icon)
 
 
-def draw_pours_icons() -> None:
-    for n in (2, 3, 4):
-        im = Image.new("RGBA", (48, 48), (0, 0, 0, 0))
-        px = im.load()
-        # cup
-        for y in range(22, 40):
-            for x in range(14, 34):
-                px[x, y] = (240, 235, 220, 255)
-        for y in range(26, 36):
-            for x in range(16, 32):
-                px[x, y] = (92, 58, 32, 255)
-        # pour arcs
-        for i in range(n):
-            x0 = 10 + i * 8
-            for t in range(10):
-                x = x0 + t // 2
-                y = 6 + t
-                if 0 <= x < 48 and 0 <= y < 48:
-                    px[x, y] = (140, 190, 220, 255)
-        save(f"ritual/pours_{n}.png", im)
+def build_pours_icons() -> None:
+    for n, source_name in POUR_SOURCES.items():
+        source = PROMO / source_name
+        if not source.is_file():
+            raise FileNotFoundError(f"missing independent pours source: {source}")
+        save(
+            f"ritual/pours_{n}.png",
+            chroma_key_fit(Image.open(source), 48, 48, 32, margin=3),
+        )
 
 
-def draw_paper_icon() -> None:
-    im = Image.new("RGBA", (48, 48), (0, 0, 0, 0))
-    px = im.load()
-    # cone paper
-    for y in range(8, 40):
-        w = 4 + (y - 8)
-        cx = 24
-        for x in range(cx - w, cx + w + 1):
-            if 0 <= x < 48:
-                edge = abs(x - cx) >= w - 1
-                px[x, y] = (210, 200, 180, 255) if not edge else (120, 100, 70, 255)
-    # crease
-    for y in range(10, 38):
-        px[24, y] = (170, 155, 130, 255)
-    save("ritual/drip_paper.png", im)
+def build_paper_icon() -> None:
+    source = PROMO / PAPER_SOURCE
+    if not source.is_file():
+        raise FileNotFoundError(f"missing independent paper source: {source}")
+    save(
+        "ritual/drip_paper.png",
+        chroma_key_fit(Image.open(source), 48, 48, 28, margin=3),
+    )
 
 
 def main() -> int:
@@ -277,8 +335,8 @@ def main() -> int:
     print("grind/temp/pours/paper")
     draw_grind_icons()
     draw_temp_icons()
-    draw_pours_icons()
-    draw_paper_icon()
+    build_pours_icons()
+    build_paper_icon()
     print("done")
     return 0
 

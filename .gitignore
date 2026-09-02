@@ -8,3 +8,5 @@ build/
 __pycache__/
 *.pyc
 .DS_Store
+tools/story-atlas/node_modules/
+tools/story-atlas/dist/

@@ -142,6 +142,12 @@ def check_lua() -> None:
     else:
         log("FAIL", "缺少 game/audio/3ds/amb_creek.mp3（DEV-069 近水溪水）")
 
+    ocean_3ds = GAME / "audio" / "3ds" / "amb_ocean_waves.wav"
+    if ocean_3ds.is_file() and ocean_3ds.stat().st_size > 100_000:
+        log("OK", "真机海浪环境音使用静态 PCM WAV，避免 MP3 stream 锁死")
+    else:
+        log("FAIL", "缺少 game/audio/3ds/amb_ocean_waves.wav（真机安全静态循环）")
+
     if "console_prox_amb_bgm_switch" in audio_src:
         log("OK", "audio.lua 真机模式 console_prox_amb_bgm_switch")
     else:
@@ -198,14 +204,32 @@ def check_lua() -> None:
 
 def check_rsf() -> None:
     text = RSF.read_text(encoding="utf-8")
-    if re.search(r"SystemModeExt\s*:\s*124MB", text):
-        log("OK", "RSF SystemModeExt=124MB（New 3DS）")
+    if re.search(r"SystemModeExt\s*:\s*Legacy", text):
+        log("OK", "RSF SystemModeExt=Legacy（Old 3DS）")
     else:
-        log("FAIL", "cia/info.rsf 未设 SystemModeExt: 124MB")
-    if re.search(r"CpuSpeed\s*:\s*804MHz", text):
-        log("OK", "RSF CpuSpeed=804MHz")
+        log("FAIL", "cia/info.rsf 未设 SystemModeExt: Legacy")
+    if re.search(r"CpuSpeed\s*:\s*268MHz", text):
+        log("OK", "RSF CpuSpeed=268MHz（Old 3DS）")
     else:
-        log("WARN", "cia/info.rsf 未开 804MHz")
+        log("FAIL", "cia/info.rsf 未设 CpuSpeed: 268MHz")
+    if re.search(r"EnableL2Cache\s*:\s*false", text):
+        log("OK", "RSF 已关闭 New 3DS L2 cache")
+    else:
+        log("FAIL", "cia/info.rsf 必须 EnableL2Cache: false")
+    if re.search(r"CanAccessCore2\s*:\s*false", text):
+        log("OK", "RSF 已关闭 New 3DS Core2")
+    else:
+        log("FAIL", "cia/info.rsf 必须 CanAccessCore2: false")
+
+    build = BUILD_CIA.read_text(encoding="utf-8")
+    if 'UNIQUE_ID="0xF4C4A"' in build:
+        log("OK", "CIA 使用新 Homebrew Title ID 000400000F4C4A00")
+    else:
+        log("FAIL", "CIA Unique ID 不是预期的 0xF4C4A")
+    if 'CIA_WITH_BANNER="${CIA_WITH_BANNER:-0}"' in build:
+        log("OK", "实验 CIA 默认关闭 banner/audio")
+    else:
+        log("FAIL", "实验 CIA 未默认关闭 banner/audio")
 
 
 def check_pngs() -> None:
@@ -249,9 +273,9 @@ def check_romfs() -> None:
         return
     need = [
         ROMFS / "main.lua",
-        ROMFS / "assets" / "title_top.png",
+        ROMFS / "assets" / "ui" / "title_top.png",
         ROMFS / "game" / "main.lua",
-        ROMFS / "game" / "assets" / "title_top.png",
+        ROMFS / "game" / "assets" / "ui" / "title_top.png",
         ROMFS / "game" / "conf.lua",
     ]
     missing = [p.relative_to(ROMFS) for p in need if not p.is_file()]
@@ -261,7 +285,7 @@ def check_romfs() -> None:
         log("OK", "RomFS 同时有 /main.lua 与 /game/main.lua")
 
 
-def check_dist() -> None:
+def check_dist(allow_cia_experiment: bool = False) -> None:
     cia = DIST / CIA_NAME
     tdsx = DIST / f"{HB_NAME}.3dsx"
     title = DIST / "game" / "assets" / "ui" / "title_top.png"
@@ -279,12 +303,15 @@ def check_dist() -> None:
     else:
         log("FAIL", "dist/game 缺 camp_static_base.t3x（真机营地静态底图）")
     if cia.is_file():
-        log("WARN", f"dist 留有旧 CIA {(cia.stat().st_size / 1e6):.1f} MB；不得安装")
+        if allow_cia_experiment:
+            log("OK", f"实验 CIA 已生成 {(cia.stat().st_size / 1e6):.1f} MB")
+        else:
+            log("WARN", f"dist 留有 CIA {(cia.stat().st_size / 1e6):.1f} MB；默认不得安装")
     else:
         log("OK", "dist 无 CampingTrip.cia（仅部署 Homebrew）")
 
 
-def check_sd(require: bool) -> None:
+def check_sd(require: bool, allow_cia_experiment: bool = False) -> None:
     sd = find_sd()
     if not sd:
         log("FAIL" if require else "WARN", "未挂载 SD；插卡后重跑本脚本才能验卡上布局")
@@ -335,7 +362,10 @@ def check_sd(require: bool) -> None:
 
     cia_tool = sd / "CIA(tool)" / CIA_NAME
     if cias.is_file() or cia_tool.is_file():
-        log("FAIL", "卡上仍有可误装的 CampingTrip.cia；应隔离，只跑 3dsx")
+        if allow_cia_experiment:
+            log("OK", "卡上实验 CIA 位于 cias/ 或 CIA(tool)/，未混入 Homebrew 目录")
+        else:
+            log("FAIL", "卡上仍有可误装的 CampingTrip.cia；应隔离，只跑 3dsx")
     else:
         log("OK", "卡上无可误装的 CampingTrip.cia")
 
@@ -344,6 +374,11 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--require-sd", action="store_true", help="没插卡也算失败")
     ap.add_argument("--skip-sd", action="store_true", help="只检查源码与本地 dist，不读取已插入的 SD")
+    ap.add_argument(
+        "--allow-cia-experiment",
+        action="store_true",
+        help="仅在用户明确要求 CIA 单变量实验时允许 dist/SD 中存在 CIA",
+    )
     args = ap.parse_args()
 
     print("== 露营之旅 真机安装预检 ==")
@@ -355,16 +390,19 @@ def main() -> int:
     check_rsf()
     check_pngs()
     check_romfs()
-    check_dist()
+    check_dist(args.allow_cia_experiment)
     if not args.skip_sd:
-        check_sd(args.require_sd)
+        check_sd(args.require_sd, args.allow_cia_experiment)
 
     print(f"-- {ok_n} ok / {warn_n} warn / {fail_n} fail --")
     if fail_n:
         print("RESULT FAIL  不要告诉用户可以拔卡安装")
         return 1
     print("RESULT PASS  电脑侧闸门通过")
-    print("真机仍须：Homebrew 选择 LovePotion/CampingTrip；禁止安装 CampingTrip.cia")
+    if args.allow_cia_experiment:
+        print("CIA EXPERIMENT 仅表示结构通过；真机启动仍有 HOME 菜单异常风险")
+    else:
+        print("真机仍须：Homebrew 选择 LovePotion/CampingTrip；默认禁止安装 CampingTrip.cia")
     return 0
 
 

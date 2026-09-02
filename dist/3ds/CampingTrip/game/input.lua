@@ -6,6 +6,7 @@ local Session = require("session")
 local Menu = require("scenes.menu")
 local Cast = require("scenes.cast")
 local Codex = require("scenes.codex")
+local MenuDraw = require("draw.menu")
 local Input = {}
 local host
 
@@ -24,7 +25,35 @@ local function playActionHit(lx, ly)
   if R.canGoHome and lx >= 170 and lx <= 300 and ly >= 210 and ly <= 232 then return "home" end
 end
 
+local function handleQuitConfirmKey(key)
+  if not R.quitConfirm then return false end
+  if key == "left" then Flow.nudgeQuitConfirm(-1)
+  elseif key == "right" or key == "d" then Flow.nudgeQuitConfirm(1)
+  elseif key == "return" or key == "space" or key == "a" or key == "z" then Flow.resolveQuitConfirm()
+  elseif key == "b" then Flow.cancelQuitConfirm()
+  end
+  return true
+end
+
+local function handleQuitConfirmPad(button)
+  if not R.quitConfirm then return false end
+  if button == "dpleft" then Flow.nudgeQuitConfirm(-1)
+  elseif button == "dpright" then Flow.nudgeQuitConfirm(1)
+  elseif button == "a" then Flow.resolveQuitConfirm()
+  elseif button == "b" or button == "back" then Flow.cancelQuitConfirm()
+  end
+  return true
+end
+
 function Input.onBottomTouch(lx, ly)
+  if R.quitConfirm then
+    local hit = MenuDraw.hitQuitConfirm(lx, ly)
+    if hit then
+      R.quitConfirmChoice = hit
+      Flow.resolveQuitConfirm()
+    end
+    return
+  end
   if R.scene == "title" then
     local i = Menu.hit(lx, ly)
     if i then
@@ -38,13 +67,24 @@ function Input.onBottomTouch(lx, ly)
     elseif lx >= 100 and lx <= 220 and ly >= 204 and ly <= 226 then Flow.goTitle() end
   elseif R.scene == "about" then
     if lx >= 100 and lx <= 220 and ly >= 204 and ly <= 226 then Flow.goTitle() end
+  elseif R.scene == "diary" then
+    if lx < 104 then Flow.nudgeDiary(-1)
+    elseif lx > 216 then Flow.nudgeDiary(1)
+    else Flow.finishDiary() end
   elseif R.scene == "prologue" or R.scene == "depart"
-      or R.scene == "homecoming" or R.scene == "diary" then
+      or R.scene == "homecoming" then
     Flow.advancePrimary()
   elseif R.scene == "cast" then
     local i = Cast.hit(lx, ly)
     if i then Cast.set(i)
     elseif lx >= 100 and lx <= 220 and ly >= 210 and ly <= 232 then Flow.confirmCast() end
+  elseif R.scene == "destination" then
+    if ly >= 56 and ly <= 172 then
+      State.destination.i = lx < 160 and 1 or 2
+      Flow.confirmDestination()
+    elseif lx >= 100 and lx <= 220 and ly >= 204 and ly <= 232 then
+      Flow.confirmDestination()
+    end
   elseif R.scene == "play" then
     if R.ritual then
       if lx >= 100 and lx <= 220 and ly >= 210 and ly <= 232 then Session.tryUseGear()
@@ -70,10 +110,12 @@ end
 
 function Input.onKey(key)
   if key == "escape" then
-    if R.ritual then GearPlay.cancelRitual(); R.brewActive = false; return end
-    if R.scene == "title" then love.event.quit() else Flow.goTitle() end
+    if R.quitConfirm then Flow.cancelQuitConfirm(); return end
+    if R.scene == "title" then love.event.quit(); return end
+    Flow.tryBack()
     return
   end
+  if handleQuitConfirmKey(key) then return end
 
   if R.scene == "title" then
     if key == "up" or key == "w" then Menu.move(R, -1)
@@ -87,15 +129,27 @@ function Input.onKey(key)
     elseif key == "return" or key == "space" or key == "a" or key == "b" then Flow.goTitle() end
   elseif R.scene == "about" then
     if key == "return" or key == "space" or key == "a" or key == "b" then Flow.goTitle() end
+  elseif R.scene == "diary" then
+    if key == "b" then Flow.tryBack()
+    elseif key == "left" then Flow.nudgeDiary(-1)
+    elseif key == "right" or key == "d" then Flow.nudgeDiary(1)
+    elseif key == "return" or key == "space" or key == "a" then Flow.finishDiary() end
   elseif R.scene == "prologue" or R.scene == "depart"
-      or R.scene == "homecoming" or R.scene == "diary" then
-    if key == "return" or key == "space" or key == "a" then Flow.advancePrimary() end
+      or R.scene == "homecoming" then
+    if key == "b" then Flow.tryBack()
+    elseif key == "return" or key == "space" or key == "a" then Flow.advancePrimary() end
   elseif R.scene == "cast" then
-    if key == "left" then Cast.move("left")
+    if key == "b" then Flow.tryBack()
+    elseif key == "left" then Cast.move("left")
     elseif key == "right" then Cast.move("right")
     elseif key == "up" then Cast.move("up")
     elseif key == "down" then Cast.move("down")
     elseif key == "return" or key == "space" or key == "a" then Flow.confirmCast() end
+  elseif R.scene == "destination" then
+    if key == "b" then Flow.tryBack()
+    elseif key == "left" or key == "up" then Flow.nudgeDestination(-1)
+    elseif key == "right" or key == "down" or key == "d" then Flow.nudgeDestination(1)
+    elseif key == "return" or key == "space" or key == "a" then Flow.confirmDestination() end
   elseif R.scene == "play" then
     if R.cupPick then
       if R.cupKind and R.drippedOnce and R.teaReady
@@ -108,10 +162,10 @@ function Input.onKey(key)
       elseif key == "up" or key == "w" then Session.nudgeCupStyle(0, -1)
       elseif key == "down" or key == "s" then Session.nudgeCupStyle(0, 1)
       elseif key == "return" or key == "space" or key == "z" then Session.drinkFromCup()
-      elseif key == "b" then R.cupPick, R.cupKind = false, nil end
+      elseif key == "b" then Flow.tryBack() end
       return
     end
-    if R.ritual and R.ritual.kind ~= "fan" then
+    if R.ritual then
       if key == "left" then GearPlay.nudgeRitual(-1)
       elseif key == "right" or key == "d" then GearPlay.nudgeRitual(1) end
     end
@@ -123,17 +177,18 @@ function Input.onKey(key)
     elseif key == "return" or key == "space" or key == "z" then Session.tryUseGear()
     elseif key == "x" then Session.advanceTime()
     elseif key == "r" then Time.fastForward(); Audio.syncPlayBgm()
-    elseif key == "h" and R.canGoHome then Flow.goHomecoming() end
+    elseif key == "h" and R.canGoHome then Flow.goHomecoming()
+    elseif key == "b" then Flow.tryBack() end
   end
 end
 
 function Input.onGamepad(button)
   if button == "start" then love.event.quit(); return end
   if button == "back" or button == "b" then
-    if R.ritual then GearPlay.cancelRitual(); R.brewActive = false; return end
-    if R.scene ~= "title" then Flow.goTitle() end
+    Flow.tryBack()
     return
   end
+  if handleQuitConfirmPad(button) then return end
   if R.scene == "title" then
     if button == "dpup" then Menu.move(R, -1)
     elseif button == "dpdown" then Menu.move(R, 1)
@@ -146,8 +201,12 @@ function Input.onGamepad(button)
     elseif button == "a" then Flow.goTitle() end
   elseif R.scene == "about" then
     if button == "a" then Flow.goTitle() end
+  elseif R.scene == "diary" then
+    if button == "dpleft" then Flow.nudgeDiary(-1)
+    elseif button == "dpright" then Flow.nudgeDiary(1)
+    elseif button == "a" then Flow.finishDiary() end
   elseif R.scene == "prologue" or R.scene == "depart"
-      or R.scene == "homecoming" or R.scene == "diary" then
+      or R.scene == "homecoming" then
     if button == "a" then Flow.advancePrimary() end
   elseif R.scene == "cast" then
     if button == "dpleft" then Cast.move("left")
@@ -155,6 +214,10 @@ function Input.onGamepad(button)
     elseif button == "dpup" then Cast.move("up")
     elseif button == "dpdown" then Cast.move("down")
     elseif button == "a" then Flow.confirmCast() end
+  elseif R.scene == "destination" then
+    if button == "dpleft" or button == "dpup" then Flow.nudgeDestination(-1)
+    elseif button == "dpright" or button == "dpdown" then Flow.nudgeDestination(1)
+    elseif button == "a" then Flow.confirmDestination() end
   elseif R.scene == "play" then
     if R.cupPick then
       if button == "dpleft" then Session.nudgeCupStyle(-1, 0)
@@ -162,10 +225,10 @@ function Input.onGamepad(button)
       elseif button == "dpup" then Session.nudgeCupStyle(0, -1)
       elseif button == "dpdown" then Session.nudgeCupStyle(0, 1)
       elseif button == "a" then Session.drinkFromCup()
-      elseif button == "b" then R.cupPick, R.cupKind = false, nil end
+      end
       return
     end
-    if R.ritual and R.ritual.kind ~= "fan" then
+    if R.ritual then
       if button == "dpleft" then GearPlay.nudgeRitual(-1)
       elseif button == "dpright" then GearPlay.nudgeRitual(1) end
     end

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Slice tent pitch/pack sheets → gear/tent + camp tent tiles.
+"""Build the dedicated camp tent plus legacy tent catalog/pack assets.
 
 IMPORTANT: tent fabric (尤其沙褐) 不能走 gen_slice_common.kill_bg——
 木纹/浅木掩码会把沙色帐布当成背景抠没，地图上只剩绿草垫+细杆。
@@ -7,18 +7,61 @@ IMPORTANT: tent fabric (尤其沙褐) 不能走 gen_slice_common.kill_bg——
 from __future__ import annotations
 
 from pathlib import Path
+import sys
 
 import numpy as np
 from PIL import Image
 
-from gen_slice_common import load_gen, quantize_rgba, slice_equal, slice_grid, slice_runs
+from gen_slice_common import chroma_key_fit, load_gen, quantize_rgba, slice_equal, slice_grid, slice_runs
 
 ROOT = Path(__file__).resolve().parents[1]
 TENT_GEAR = ROOT / "game" / "assets" / "gear" / "tent"
 TENT_CAMP = ROOT / "game" / "assets" / "scenes" / "forest" / "camp" / "tent"
+FOREST_CAMP = ROOT / "game" / "assets" / "scenes" / "forest" / "camp"
+OPEN_HD_SOURCE = ROOT / "docs" / "promo" / "tent_camp_open_chroma_gen_ref.png"
+OPEN_HD_OUT = FOREST_CAMP / "tent_open_hd.png"
 
 STYLES = ["dome", "tunnel", "peak"]
 COLORS = ["sand", "pine", "mist"]
+
+ASSET_PROVENANCE = [
+    {
+        "outputs": [
+            "game/assets/scenes/forest/camp/tent_open_hd.png",
+        ],
+        "sources": "docs/promo/tent_camp_open_chroma_gen_ref.png",
+        "operation": "chroma_key_fit CKE pixel_scale=1 + source-direct resize 96x72 + quantize",
+    },
+    {
+        "outputs": [
+            "game/assets/gear/tent/style_*.png",
+            "game/assets/gear/tent/color_*.png",
+            "game/assets/gear/tent/door_shut.png",
+            "game/assets/scenes/forest/camp/tent/pitch_*_shut.png",
+            "game/assets/scenes/forest/camp/tile_tent.png",
+            "game/assets/scenes/forest/camp/tile_tent_open.png",
+        ],
+        "sources": "docs/promo/tents_pitch_shut_sheet_gen_ref.png",
+        "operation": "slice_grid + background_key + crop + resize + quantize",
+    },
+    {
+        "outputs": [
+            "game/assets/gear/tent/door_ajar.png",
+            "game/assets/scenes/forest/camp/tent/pitch_*_ajar.png",
+        ],
+        "sources": "docs/promo/tents_pitch_ajar_sheet_gen_ref.png",
+        "operation": "slice_grid + background_key + crop + resize + quantize",
+    },
+    {
+        "outputs": [
+            "game/assets/gear/tent/pack_*.png",
+            "game/assets/scenes/forest/camp/tent/pack_*.png",
+            "game/assets/scenes/forest/camp/tile_tent_packed.png",
+        ],
+        "sources": "docs/promo/tents_pack_sheet_gen_ref.png",
+        "operation": "slice_runs + background_key + crop + resize + quantize",
+    },
+]
 
 
 def kill_sheet_pad(im: Image.Image) -> Image.Image:
@@ -70,7 +113,33 @@ def save(path: Path, im: Image.Image) -> None:
     print(f"  {path.relative_to(ROOT)} {im.size}")
 
 
+def build_open_hd() -> None:
+    """从独立绿幕制作源生成 2×像素密度的营地展开帐篷。"""
+    if not OPEN_HD_SOURCE.is_file():
+        raise SystemExit(f"missing generated source: {OPEN_HD_SOURCE}")
+    tent = chroma_key_fit(
+        Image.open(OPEN_HD_SOURCE).convert("RGBA"),
+        96,
+        72,
+        40,
+        margin=2,
+        pixel_scale=1,
+    )
+    save(OPEN_HD_OUT, tent)
+    bbox = tent.getchannel("A").getbbox()
+    if bbox is None:
+        raise SystemExit("camp tent CKE removed the whole subject")
+    width, height = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    if width < 88 or height < 62:
+        raise SystemExit(f"camp tent subject too small bbox={bbox}")
+    print(f"ok camp tent hd bbox={bbox} visible={width}x{height}")
+
+
 def main() -> int:
+    build_open_hd()
+    if "--open-hd-only" in sys.argv:
+        return 0
+
     shut = load_gen("tents_pitch_shut_sheet_gen.png")
     ajar = load_gen("tents_pitch_ajar_sheet_gen.png")
     packs = load_gen("tents_pack_sheet_gen.png")

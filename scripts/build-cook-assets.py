@@ -22,6 +22,42 @@ COOK_STEPS = (
     (3, "cook_step_3_plate_gen.png"),
 )
 
+ASSET_PROVENANCE = [
+    {
+        "outputs": "game/assets/ritual/cook/cuisine_{id}.png",
+        "sources": "docs/promo/cook_cuisine_{id}_gen_ref.png",
+        "variants": {"id": ["bbq", "sushi", "hotpot", "skewer", "stew"]},
+        "operation": "chroma_key + crop + resize + quantize",
+    },
+    {
+        "outputs": "game/assets/ritual/cook/heat_{id}.png",
+        "sources": "docs/promo/cook_heat_{id}_gen_ref.png",
+        "variants": {"id": ["soft", "mid", "hot"]},
+        "operation": "background_key + crop + resize + quantize",
+    },
+    {
+        "outputs": "game/assets/ritual/cook/season_{id}.png",
+        "sources": "docs/promo/cook_season_{id}_gen_ref.png",
+        "variants": {"id": ["salt", "soy", "citrus"]},
+        "operation": "background_key + crop + resize + quantize",
+    },
+    {
+        "outputs": "game/assets/ritual/cook/cook_1.png",
+        "sources": "docs/promo/cook_step_1_fire_gen_ref.png",
+        "operation": "cover_crop + resize + quantize",
+    },
+    {
+        "outputs": "game/assets/ritual/cook/cook_2.png",
+        "sources": "docs/promo/cook_step_2_flip_gen_ref.png",
+        "operation": "cover_crop + resize + quantize",
+    },
+    {
+        "outputs": "game/assets/ritual/cook/cook_3.png",
+        "sources": "docs/promo/cook_step_3_plate_gen_ref.png",
+        "operation": "cover_crop + resize + quantize",
+    },
+]
+
 
 def kill_chroma_green(im: Image.Image) -> Image.Image:
     a = np.array(im.convert("RGBA"))

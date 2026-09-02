@@ -1,6 +1,7 @@
 -- 露营之旅 — LovePotion / LÖVE 引擎壳。
 
 AP = require("asset_paths")
+Destinations = require("destination_registry")
 State = require("state")
 Persist = require("persist")
 Time = require("time")
@@ -11,6 +12,7 @@ TeaBrew = require("tea_brew")
 FishRod = require("fish_rod")
 TentGear = require("tent_gear")
 CupSip = require("cup_sip")
+CookMeal = require("cook_meal")
 Audio = require("audio")
 Assets = require("assets")
 CampMap = require("camp_map")
@@ -50,7 +52,9 @@ function love.load()
   CampWorld.seedStars()
   if not R.isConsole then
     R.desktopBottom = love.graphics.newCanvas(R.BOT_W, R.BOT_H)
-    love.window.setMode(R.TOP_W, R.TOP_H + R.BOT_H)
+    love.window.setMode(R.TOP_W, R.TOP_H + R.BOT_H, {
+      vsync = Playtest.wanted() and 0 or 1,
+    })
   end
   if R.isConsole then Audio.ensureConsoleLoaded() end
   Flow.syncSceneBgm()
@@ -68,13 +72,14 @@ function love.update(dt)
   if dt > R.perfMaxDt then R.perfMaxDt = dt end
   if R.perfWindow >= 5 then
     Bindings.appendLoadLog(string.format(
-      "perf scene=%s frames=%d slow=%d maxDtMs=%.1f mode=%s",
-      R.scene, R.perfFrames, R.perfSlowFrames, R.perfMaxDt * 1000,
-      R.perfMode .. "/" .. Audio.consoleMode()
+      "perf scene=%s destination=%s frames=%d slow=%d maxDtMs=%.1f mode=%s audio=%s",
+      R.scene, Destinations.currentId(), R.perfFrames, R.perfSlowFrames, R.perfMaxDt * 1000,
+      R.perfMode .. "/" .. Audio.consoleMode(), Audio.debugState()
     ))
     R.perfWindow, R.perfFrames, R.perfSlowFrames, R.perfMaxDt = 0, 0, 0, 0
   end
   Audio.ensureConsoleLoaded()
+  if CampPreload.active() and R.scene ~= "play" then CampPreload.runSlice(1) end
   R.titlePulse = R.titlePulse + dt
   R.waterPhase = R.waterPhase + dt * 2.2
   Toast.update(dt)
@@ -88,9 +93,11 @@ function love.update(dt)
       R.player.idleT = R.player.idleT - dt
       if R.player.idleT <= 0 then R.player.walkFrame = 0 end
     end
-    if not R.staticPlayFx then
-      CampWorld.updateFish(dt)
+    if R.critterFx then
+      if Destinations.current().ecology.fish then CampWorld.updateFish(dt) end
       CampWorld.updateCritters(dt)
+    end
+    if not R.staticPlayFx then
       CampWorld.updateNight(dt)
     end
     Audio.tick(dt, R.titlePulse)

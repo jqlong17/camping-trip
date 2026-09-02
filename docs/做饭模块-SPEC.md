@@ -43,6 +43,10 @@
 | `scripts/build-cook-assets.py` | 一件一文生图；禁止 sheet 横切 |
 | 删除扇子入口 | `fan` gear / ritual / playtest `05d_fan` |
 
+上屏使用独立 `assets/previews/ritual/cook/*.png`（320×180）；48×48 参数图只用于
+下屏 catalog，160×120 过程帧只作兼容资源。preview 必须从对应高分辨率
+`docs/promo` 制作源直接缩小，禁止先缩成目录图再放大。
+
 ---
 
 ## 5. 验收

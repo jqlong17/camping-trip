@@ -163,20 +163,29 @@ function C.drawTop(ritual, assets, context)
   love.graphics.rectangle("fill", 0, 0, context.TOP_W, context.TOP_H)
   love.graphics.setColor(1, 1, 1, 1)
   local phase = C.phaseById(ritual.phase)
-  local img
+  local img, previewPath
   if phase and phase.kind == "brew" then
     img = assets and assets.cupSip and assets.cupSip[ritual.brewStep]
+    previewPath = "assets/previews/ritual/cup/sip_" .. tostring(ritual.brewStep) .. ".png"
   elseif phase and phase.kind == "choice" then
     local list = C.catalogFor(phase)
     local item = list and list[ritual.pick]
     local bag = assets and phase.assetBag and assets[phase.assetBag]
     img = bag and item and bag[item.id]
+    if item then previewPath = "assets/previews/ritual/cup/focus_" .. item.id .. ".png" end
   else
     img = assets and assets.cupSip and assets.cupSip[ritual.brewStep or 1]
+    previewPath = "assets/previews/ritual/cup/sip_" .. tostring(ritual.brewStep or 1) .. ".png"
   end
+  local preview = context.loadTopPreview and context.loadTopPreview(previewPath)
+  if preview then img = preview end
   if img then
     local iw, ih = img:getWidth(), img:getHeight()
-    if phase and phase.kind == "brew" then
+    if preview then
+      local x, y = math.floor((context.TOP_W - 320) / 2), 30
+      if context.drawFitted then context.drawFitted(img, x, y, 320, 180, 1, 1)
+      else love.graphics.draw(img, x, y) end
+    elseif phase and phase.kind == "brew" then
       -- 4:3 特写铺满后上屏真居中
       local maxW, maxH = context.TOP_W - 32, context.TOP_H - 40
       local s = math.min(maxW / iw, maxH / ih)
@@ -187,14 +196,10 @@ function C.drawTop(ritual, assets, context)
         0, s, s
       )
     else
-      -- 关注点图标：放大到约 96px 并居中
-      local target = 96
-      local s = math.min(target / iw, target / ih, 4)
       love.graphics.draw(
         img,
-        math.floor((context.TOP_W - iw * s) / 2),
-        math.floor((context.TOP_H - ih * s) / 2),
-        0, s, s
+        math.floor((context.TOP_W - iw) / 2),
+        math.floor((context.TOP_H - ih) / 2)
       )
     end
   end

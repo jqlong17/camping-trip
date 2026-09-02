@@ -99,7 +99,13 @@ function Time.label()
 end
 
 function Time.tintRow(i)
-  return TINT[i or t.index] or TINT[3]
+  local index = i or t.index
+  local profiles = Destinations.current().timeProfiles or {}
+  if index == 1 and profiles.sunrise and profiles.sunrise.tint then return profiles.sunrise.tint end
+  if (index == 2 or index == 3) and profiles.day and profiles.day.tint then return profiles.day.tint end
+  if index == 4 and profiles.sunset and profiles.sunset.tint then return profiles.sunset.tint end
+  if (index == 5 or index == 6) and profiles.night and profiles.night.tint then return profiles.night.tint end
+  return TINT[index] or TINT[3]
 end
 
 function Time.isNight()
@@ -131,8 +137,8 @@ end
 
 function Time.resetForCamp()
   t.dayIndex = 1
-  t.clockMin = 9 * 60
-  t.index = 2
+  t.clockMin = Destinations.currentId() == "coast" and (6 * 60 + 20) or (9 * 60)
+  t.index = indexFromClock(t.clockMin)
   t.frozen = false
   t.autoT = 0
 end

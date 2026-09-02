@@ -296,7 +296,7 @@ end
 
 function F.topView(ritual, assets)
   local phase = F.phaseById(ritual.phase or "brew")
-  local title, img, mode = "钓鱼", nil, "icon"
+  local title, img, mode, previewPath = "钓鱼", nil, "icon", nil
   if not phase then return title, nil, mode end
   if phase.kind == "brew" then
     title = "钓鱼 · " .. (F.brewLabels[ritual.brewStep] or tostring(ritual.brewStep))
@@ -309,26 +309,40 @@ function F.topView(ritual, assets)
       title = "钓到 · " .. H().fishName(ritual.fishKind)
     end
     mode = "brew"
+    previewPath = "assets/previews/ritual/fish/"
+      .. ((ritual.brewStep == 4 and not ritual.caught) and "fish_4_miss.png"
+        or ("fish_" .. tostring(ritual.brewStep) .. ".png"))
   elseif phase.kind == "confirm" then
     title = "抛竿"
     img = assets and assets.fishAnim and assets.fishAnim[1]
     mode = "brew"
+    previewPath = "assets/previews/ritual/fish/fish_1.png"
   elseif phase.kind == "choice" then
     local list = F.catalogFor(phase)
     local item = list and list[ritual.pick]
     title = phase.head .. " · " .. F.choiceLabel(phase, item)
     img = F.choiceIcon(phase, item, assets)
+    if item and phase.assetBag then
+      local prefix = ({ spots = "spot", baits = "bait", sinkers = "sinker", styles = "style" })[phase.assetBag]
+      if prefix then previewPath = "assets/previews/ritual/fish/" .. prefix .. "_" .. item.id .. ".png" end
+    end
   end
-  return title, img, mode
+  return title, img, mode, previewPath
 end
 
 function F.drawTop(ritual, assets, ctx)
   love.graphics.setColor(0, 0, 0, 0.45)
   love.graphics.rectangle("fill", 0, 0, ctx.TOP_W, ctx.TOP_H)
-  local title, img, mode = F.topView(ritual, assets)
+  local title, img, mode, previewPath = F.topView(ritual, assets)
+  local preview = ctx.loadTopPreview and ctx.loadTopPreview(previewPath)
+  if preview then img, mode = preview, "preview" end
   if img then
     love.graphics.setColor(1, 1, 1, 1)
-    if mode == "brew" then
+    if mode == "preview" then
+      local x, y = math.floor((ctx.TOP_W - 320) / 2), 44
+      if ctx.drawFitted then ctx.drawFitted(img, x, y, 320, 180, 1, 1)
+      else love.graphics.draw(img, x, y) end
+    elseif mode == "brew" then
       local srcW, srcH = 160, 120
       local iw, ih = img:getWidth(), img:getHeight()
       if iw < srcW or ih < srcH then srcW, srcH = iw, ih end
@@ -342,9 +356,8 @@ function F.drawTop(ritual, assets, ctx)
         love.graphics.draw(img, x, y, 0, s, s)
       end
     else
-      local s = 3
       local iw, ih = img:getWidth(), img:getHeight()
-      love.graphics.draw(img, (ctx.TOP_W - iw * s) / 2, (ctx.TOP_H - ih * s) / 2, 0, s, s)
+      love.graphics.draw(img, math.floor((ctx.TOP_W - iw) / 2), math.floor((ctx.TOP_H - ih) / 2))
     end
   end
   if ctx.uiFont then love.graphics.setFont(ctx.uiFont) end

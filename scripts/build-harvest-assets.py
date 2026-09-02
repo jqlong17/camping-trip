@@ -22,6 +22,14 @@ FRAMES = (
     ("fish_4_miss.png", "fish_step_4_miss_gen.png"),
 )
 
+ASSET_PROVENANCE = [
+    {"outputs": "game/assets/ritual/fish/fish_1.png", "sources": "docs/promo/fish_step_1_cast_gen_ref.png", "operation": "cover_crop + resize + quantize"},
+    {"outputs": "game/assets/ritual/fish/fish_2.png", "sources": "docs/promo/fish_step_2_wait_gen_ref.png", "operation": "cover_crop + resize + quantize"},
+    {"outputs": "game/assets/ritual/fish/fish_3.png", "sources": "docs/promo/fish_step_3_bite_gen_ref.png", "operation": "cover_crop + resize + quantize"},
+    {"outputs": "game/assets/ritual/fish/fish_4.png", "sources": "docs/promo/fish_step_4_catch_gen_ref.png", "operation": "cover_crop + resize + quantize"},
+    {"outputs": "game/assets/ritual/fish/fish_4_miss.png", "sources": "docs/promo/fish_step_4_miss_gen_ref.png", "operation": "cover_crop + resize + quantize"},
+]
+
 
 def brew_fit(im: Image.Image, tw: int = 160, th: int = 120, colors: int = 40) -> Image.Image:
     """Cover-crop into filled 4:3 — no 120×76 sheet panels."""

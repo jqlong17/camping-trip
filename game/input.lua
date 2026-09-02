@@ -67,13 +67,24 @@ function Input.onBottomTouch(lx, ly)
     elseif lx >= 100 and lx <= 220 and ly >= 204 and ly <= 226 then Flow.goTitle() end
   elseif R.scene == "about" then
     if lx >= 100 and lx <= 220 and ly >= 204 and ly <= 226 then Flow.goTitle() end
+  elseif R.scene == "diary" then
+    if lx < 104 then Flow.nudgeDiary(-1)
+    elseif lx > 216 then Flow.nudgeDiary(1)
+    else Flow.finishDiary() end
   elseif R.scene == "prologue" or R.scene == "depart"
-      or R.scene == "homecoming" or R.scene == "diary" then
+      or R.scene == "homecoming" then
     Flow.advancePrimary()
   elseif R.scene == "cast" then
     local i = Cast.hit(lx, ly)
     if i then Cast.set(i)
     elseif lx >= 100 and lx <= 220 and ly >= 210 and ly <= 232 then Flow.confirmCast() end
+  elseif R.scene == "destination" then
+    if ly >= 56 and ly <= 172 then
+      State.destination.i = lx < 160 and 1 or 2
+      Flow.confirmDestination()
+    elseif lx >= 100 and lx <= 220 and ly >= 204 and ly <= 232 then
+      Flow.confirmDestination()
+    end
   elseif R.scene == "play" then
     if R.ritual then
       if lx >= 100 and lx <= 220 and ly >= 210 and ly <= 232 then Session.tryUseGear()
@@ -118,8 +129,13 @@ function Input.onKey(key)
     elseif key == "return" or key == "space" or key == "a" or key == "b" then Flow.goTitle() end
   elseif R.scene == "about" then
     if key == "return" or key == "space" or key == "a" or key == "b" then Flow.goTitle() end
+  elseif R.scene == "diary" then
+    if key == "b" then Flow.tryBack()
+    elseif key == "left" then Flow.nudgeDiary(-1)
+    elseif key == "right" or key == "d" then Flow.nudgeDiary(1)
+    elseif key == "return" or key == "space" or key == "a" then Flow.finishDiary() end
   elseif R.scene == "prologue" or R.scene == "depart"
-      or R.scene == "homecoming" or R.scene == "diary" then
+      or R.scene == "homecoming" then
     if key == "b" then Flow.tryBack()
     elseif key == "return" or key == "space" or key == "a" then Flow.advancePrimary() end
   elseif R.scene == "cast" then
@@ -129,6 +145,11 @@ function Input.onKey(key)
     elseif key == "up" then Cast.move("up")
     elseif key == "down" then Cast.move("down")
     elseif key == "return" or key == "space" or key == "a" then Flow.confirmCast() end
+  elseif R.scene == "destination" then
+    if key == "b" then Flow.tryBack()
+    elseif key == "left" or key == "up" then Flow.nudgeDestination(-1)
+    elseif key == "right" or key == "down" or key == "d" then Flow.nudgeDestination(1)
+    elseif key == "return" or key == "space" or key == "a" then Flow.confirmDestination() end
   elseif R.scene == "play" then
     if R.cupPick then
       if R.cupKind and R.drippedOnce and R.teaReady
@@ -180,8 +201,12 @@ function Input.onGamepad(button)
     elseif button == "a" then Flow.goTitle() end
   elseif R.scene == "about" then
     if button == "a" then Flow.goTitle() end
+  elseif R.scene == "diary" then
+    if button == "dpleft" then Flow.nudgeDiary(-1)
+    elseif button == "dpright" then Flow.nudgeDiary(1)
+    elseif button == "a" then Flow.finishDiary() end
   elseif R.scene == "prologue" or R.scene == "depart"
-      or R.scene == "homecoming" or R.scene == "diary" then
+      or R.scene == "homecoming" then
     if button == "a" then Flow.advancePrimary() end
   elseif R.scene == "cast" then
     if button == "dpleft" then Cast.move("left")
@@ -189,6 +214,10 @@ function Input.onGamepad(button)
     elseif button == "dpup" then Cast.move("up")
     elseif button == "dpdown" then Cast.move("down")
     elseif button == "a" then Flow.confirmCast() end
+  elseif R.scene == "destination" then
+    if button == "dpleft" or button == "dpup" then Flow.nudgeDestination(-1)
+    elseif button == "dpright" or button == "dpdown" then Flow.nudgeDestination(1)
+    elseif button == "a" then Flow.confirmDestination() end
   elseif R.scene == "play" then
     if R.cupPick then
       if button == "dpleft" then Session.nudgeCupStyle(-1, 0)

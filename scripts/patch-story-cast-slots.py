@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Remove baked-in default boy from storyboards; runtime overlays selected cast."""
+"""Remove baked-in default boy from travel storyboards; runtime overlays selected cast."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -17,7 +17,6 @@ STORY_CAST_SLOTS = {
     "d1": {"erase": (165, 105, 186, 136), "slot": (164, 112)},
     "d2": {"erase": (165, 107, 185, 138), "slot": (164, 114)},
     "h1": {"erase": (180, 155, 216, 202), "slot": (188, 166)},
-    "diary": {"erase": (155, 30, 270, 88), "slot": (168, 22)},
 }
 
 

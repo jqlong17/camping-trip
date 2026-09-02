@@ -33,7 +33,6 @@ local T = {
     { c = 95, name = "95度", note = "乌龙宜" },
     { c = 100, name = "100度", note = "红茶宜" }
   },
-  steeps = { 1, 2, 3, 4 },
   amountMod = {
     light = { aroma = 1, body = -1 },
     full = { body = 1, bitter = 1 }
@@ -45,27 +44,19 @@ local T = {
     piaoyi = { body = 1 },
     enamel = { body = 1, bitter = 1 }
   },
-  steepMod = {
-    [1] = { body = 1, bitter = 1 },
-    [3] = { sweet = 1, aroma = 1 },
-    [4] = { aroma = 1, body = -1 }
-  },
-  steepNotes = { [1] = "更浓", [2] = "稳", [3] = "回甘", [4] = "更透" },
   brewLabels = { "注水", "闷泡", "出汤" }
 }
 
 T.PHASES = {
-  { id = "leaf", head = "选茶叶", kind = "choice", catalog = "leaves", store = "leafI", defaultPick = 1, assetBag = "leaves",
+  { id = "leaf", head = "选茶叶", kind = "choice", catalog = "leaves", store = "leafI", defaultPick = 1, assetBag = "leaves", previewBag = "previewLeaves",
     enterToast = "选茶叶 · 左右切换 · A 确认", enterSfx = "ui_ok" },
-  { id = "amount", head = "投茶量", kind = "choice", catalog = "amounts", store = "amountI", defaultPick = 2, assetBag = "amounts",
+  { id = "amount", head = "投茶量", kind = "choice", catalog = "amounts", store = "amountI", defaultPick = 2, assetBag = "amounts", previewBag = "previewAmounts",
     enterSfx = "ui_ok" },
-  { id = "ware", head = "选茶器", kind = "choice", catalog = "wares", store = "wareI", defaultPick = 1, assetBag = "wares",
+  { id = "ware", head = "选茶器", kind = "choice", catalog = "wares", store = "wareI", defaultPick = 1, assetBag = "wares", previewBag = "previewWares",
     enterSfx = "ui_ok" },
   { id = "rinse", head = "温杯烫壶", kind = "confirm",
     enterToast = "温杯烫壶 · 按 A", enterSfx = "ui_ok" },
-  { id = "temp", head = "水温", kind = "choice", catalog = "temps", store = "tempC", valueKey = "c", defaultPick = 3, assetBag = "temps",
-    enterSfx = "ui_ok" },
-  { id = "steeps", head = "出汤次数", kind = "choice", catalog = "steeps", store = "steeps", list = true, defaultPick = 2, assetBag = "steeps",
+  { id = "temp", head = "水温", kind = "choice", catalog = "temps", store = "tempC", valueKey = "c", defaultPick = 3, assetBag = "temps", previewBag = "previewTemps",
     enterSfx = "ui_ok" },
   { id = "brew", head = "泡茶", kind = "brew", brewSteps = 3,
     enterToast = "注水 · 按 A 下一步", enterSfx = "pour" }
@@ -88,22 +79,15 @@ end
 
 function T.catalogFor(phase)
   if not phase or not phase.catalog then return nil end
-  if phase.list then
-    local items = {}
-    for _, n in ipairs(T[phase.catalog]) do items[#items + 1] = n end
-    return items
-  end
   return T[phase.catalog]
 end
 
 function T.choiceLabel(phase, item)
   if not item then return "?" end
-  if phase.list then return tostring(item) .. " 次" end
   return item.name or tostring(item)
 end
 
 function T.choiceNote(phase, item)
-  if phase.list then return T.steepNotes[item] or "" end
   return item.note or ""
 end
 
@@ -111,7 +95,14 @@ function T.choiceIcon(phase, item, assets)
   if not assets or not phase.assetBag then return nil end
   local bag = assets[phase.assetBag]
   if not bag then return nil end
-  if phase.list then return bag[item] end
+  if phase.valueKey == "c" then return bag[tostring(item.c)] end
+  return item.id and bag[item.id]
+end
+
+function T.choicePreview(phase, item, assets)
+  if not assets or not phase.previewBag or not item then return nil end
+  local bag = assets[phase.previewBag]
+  if not bag then return nil end
   if phase.valueKey == "c" then return bag[tostring(item.c)] end
   return item.id and bag[item.id]
 end
@@ -157,7 +148,6 @@ function T.computeTaste(r)
   elseif r.tempC and r.tempC <= 85 then
     aroma, sweet, bitter, body = applyMod(aroma, sweet, bitter, body, { aroma = 1, sweet = 1 })
   end
-  aroma, sweet, bitter, body = applyMod(aroma, sweet, bitter, body, T.steepMod[r.steeps])
   local traits = {
     { aroma, "清香悠长" },
     { sweet, "回甘生津" },
@@ -193,8 +183,7 @@ end
 local function storePick(ritual, phase)
   local list = T.catalogFor(phase)
   local item = list and list[ritual.pick]
-  if phase.list then ritual[phase.store] = item
-  elseif phase.valueKey then ritual[phase.store] = item and item[phase.valueKey]
+  if phase.valueKey then ritual[phase.store] = item and item[phase.valueKey]
   else ritual[phase.store] = ritual.pick end
 end
 
@@ -209,7 +198,6 @@ function T.finish()
     amount = T.amounts[ritual.amountI].name,
     ware = T.wares[ritual.wareI].name,
     temp = ritual.tempC,
-    steeps = ritual.steeps,
     taste = taste
   }
   h.setPot(true, 1)
@@ -239,7 +227,7 @@ function T.start()
     phase = "leaf",
     pick = 1,
     brewStep = 1,
-    leafI = 1, amountI = 2, wareI = 1, tempC = 90, steeps = 2
+    leafI = 1, amountI = 2, wareI = 1, tempC = 90
   })
   local px, py = h.playerXY()
   h.onBrewMap(px, py, 12)
@@ -273,23 +261,26 @@ end
 
 function T.loadChoiceAssets(bucket, loadImage)
   local base = "assets/ritual/tea/"
-  bucket.leaves, bucket.amounts, bucket.wares, bucket.temps, bucket.steeps = {}, {}, {}, {}, {}
+  bucket.leaves, bucket.amounts, bucket.wares, bucket.temps = {}, {}, {}, {}
+  bucket.previewLeaves, bucket.previewAmounts, bucket.previewWares, bucket.previewTemps = {}, {}, {}, {}
   bucket.teaFrames = {}
   bucket.rinse = loadImage(base .. "tea_rinse.png")
+  bucket.previewRinse = loadImage(base .. "preview_rinse.png")
   for _, L in ipairs(T.leaves) do
     bucket.leaves[L.id] = loadImage(base .. "leaf_" .. L.id .. ".png")
+    bucket.previewLeaves[L.id] = loadImage(base .. "preview_leaf_" .. L.id .. ".png")
   end
   for _, a in ipairs(T.amounts) do
     bucket.amounts[a.id] = loadImage(base .. "tea_amount_" .. a.id .. ".png")
+    bucket.previewAmounts[a.id] = loadImage(base .. "preview_amount_" .. a.id .. ".png")
   end
   for _, w in ipairs(T.wares) do
     bucket.wares[w.id] = loadImage(base .. "ware_" .. w.id .. ".png")
+    bucket.previewWares[w.id] = loadImage(base .. "preview_ware_" .. w.id .. ".png")
   end
   for _, t in ipairs(T.temps) do
     bucket.temps[tostring(t.c)] = loadImage(base .. "tea_temp_" .. t.c .. ".png")
-  end
-  for _, n in ipairs(T.steeps) do
-    bucket.steeps[n] = loadImage(base .. "tea_steeps_" .. n .. ".png")
+    bucket.previewTemps[tostring(t.c)] = loadImage(base .. "preview_temp_" .. t.c .. ".png")
   end
   for i = 1, 3 do
     bucket.teaFrames[i] = loadImage(base .. "tea_" .. i .. ".png")
@@ -307,12 +298,14 @@ function T.topView(ritual, assets)
     mode = "brew"
   elseif phase.kind == "confirm" then
     title = "温杯烫壶"
-    img = assets and assets.rinse
+    img = assets and assets.previewRinse
+    mode = "preview"
   elseif phase.kind == "choice" then
     local list = T.catalogFor(phase)
     local item = list and list[ritual.pick]
     title = phase.head .. " · " .. T.choiceLabel(phase, item)
-    img = T.choiceIcon(phase, item, assets)
+    img = T.choicePreview(phase, item, assets)
+    mode = img and "preview" or "catalog"
   end
   return title, img, mode
 end
@@ -323,13 +316,24 @@ function T.drawTop(ritual, assets, ctx)
   local title, img, mode = T.topView(ritual, assets)
   if img then
     love.graphics.setColor(1, 1, 1, 1)
-    if mode == "brew" then
-      local srcW, srcH, s = 120, 76, 2
-      ctx.drawFitted(img, math.floor((ctx.TOP_W - srcW * s) / 2), 34, srcW, srcH, s, s)
+    local iw, ih = img:getWidth(), img:getHeight()
+    if mode == "brew" or mode == "preview" then
+      -- 上屏只读独立高清资源；3DS POT 纹理由 drawFitted 裁到逻辑内容区。
+      local srcW, srcH = mode == "brew" and 320 or 256, mode == "brew" and 180 or 192
+      if iw < srcW or ih < srcH then srcW, srcH = iw, ih end
+      local topPad, botPad = 36, 8
+      local maxW, maxH = ctx.TOP_W - 24, ctx.TOP_H - topPad - botPad
+      local s = math.min(1, maxW / srcW, maxH / srcH)
+      local x = math.floor((ctx.TOP_W - srcW * s) / 2)
+      local y = topPad + math.floor((maxH - srcH * s) / 2)
+      if ctx.drawFitted then
+        ctx.drawFitted(img, x, y, srcW, srcH, s, s)
+      else
+        love.graphics.draw(img, x, y, 0, s, s)
+      end
     else
-      local s = 3
-      local iw, ih = img:getWidth(), img:getHeight()
-      love.graphics.draw(img, (ctx.TOP_W - iw * s) / 2, 56, 0, s, s)
+      -- 缺高清图时宁可 1:1 小图，也禁止把 48px 目录图放大。
+      love.graphics.draw(img, math.floor((ctx.TOP_W - iw) / 2), math.floor((ctx.TOP_H - ih) / 2))
     end
   end
   if ctx.uiFont then love.graphics.setFont(ctx.uiFont) end
@@ -342,25 +346,29 @@ end
 
 local function drawChoiceRow(ritual, items, phase, assets, BOT_W)
   local n = #items
-  local slotW = math.floor((BOT_W - 20) / math.min(n, 5))
+  local slotW = math.floor((BOT_W - 20) / math.max(n, 1))
   for i, it in ipairs(items) do
     local x = 10 + (i - 1) * slotW
     local on = (i == ritual.pick)
+    local boxW = slotW - 4
     love.graphics.setColor(on and 0.98 or 0.94, on and 0.88 or 0.9, on and 0.55 or 0.82)
-    love.graphics.rectangle("fill", x, 48, slotW - 4, 110)
+    love.graphics.rectangle("fill", x, 48, boxW, 96)
     love.graphics.setColor(0.3, 0.2, 0.12)
-    love.graphics.rectangle("line", x, 48, slotW - 4, 110)
+    love.graphics.rectangle("line", x, 48, boxW, 96)
     local icon = T.choiceIcon(phase, it, assets)
     if icon then
       love.graphics.setColor(1, 1, 1, 1)
       local iw, ih = icon:getWidth(), icon:getHeight()
-      local s = math.min(40 / iw, 36 / ih)
-      love.graphics.draw(icon, x + (slotW - 4 - iw * s) / 2, 56, 0, s, s)
+      local s = math.min(40 / iw, 40 / ih)
+      love.graphics.draw(icon, x + (boxW - iw * s) / 2, 54, 0, s, s)
     end
     love.graphics.setColor(0.22, 0.14, 0.08)
-    love.graphics.print(T.choiceLabel(phase, it), x + 4, 100)
+    love.graphics.printf(T.choiceLabel(phase, it), x, 108, boxW, "center")
+  end
+  local cur = items[ritual.pick]
+  if cur then
     love.graphics.setColor(0.4, 0.3, 0.2)
-    love.graphics.print(T.choiceNote(phase, it), x + 4, 118)
+    love.graphics.printf(T.choiceNote(phase, cur), 12, 152, BOT_W - 24, "center")
   end
 end
 
@@ -370,21 +378,21 @@ function T.drawBottom(ritual, assets, ctx)
   local head = "泡茶"
   if phase then
     if phase.kind == "brew" then
-      head = tostring(idx) .. "/" .. #T.PHASES .. " " .. phase.head .. " · " .. tostring(ritual.brewStep) .. "/3"
+      head = tostring(idx) .. "·" .. #T.PHASES .. " " .. phase.head .. " · " .. tostring(ritual.brewStep) .. "·3"
     else
-      head = tostring(idx) .. "/" .. #T.PHASES .. " " .. phase.head
+      head = tostring(idx) .. "·" .. #T.PHASES .. " " .. phase.head
     end
   end
   love.graphics.setColor(0.32, 0.22, 0.14)
   love.graphics.rectangle("fill", 6, 6, BOT_W - 12, 28)
   love.graphics.setColor(1, 0.96, 0.88)
-  love.graphics.print(head, 14, 12)
+  love.graphics.printf(head, 10, 12, BOT_W - 20, "left")
 
   if phase and phase.kind == "choice" then
     drawChoiceRow(ritual, T.catalogFor(phase), phase, assets, BOT_W)
   elseif phase and phase.kind == "confirm" then
     love.graphics.setColor(0.25, 0.18, 0.1)
-    love.graphics.print("先烫热杯壶，茶香才稳。", 40, 80)
+    love.graphics.printf("先烫热杯壶，茶香才稳。", 20, 80, BOT_W - 40, "center")
     if assets and assets.rinse then
       love.graphics.setColor(1, 1, 1, 1)
       love.graphics.draw(assets.rinse, 136, 100, 0, 2, 2)
@@ -393,19 +401,20 @@ function T.drawBottom(ritual, assets, ctx)
     love.graphics.setColor(0.25, 0.18, 0.1)
     local L = T.leaves[ritual.leafI]
     local W = T.wares[ritual.wareI]
-    love.graphics.print((L and L.name or "?") .. " · " .. (W and W.name or "?")
-      .. " · " .. tostring(ritual.tempC) .. "度 · " .. tostring(ritual.steeps) .. "次", 24, 70)
-    love.graphics.print("茶烟轻轻的。慢慢来。", 24, 100)
+    love.graphics.printf((L and L.name or "?") .. " · " .. (W and W.name or "?")
+      .. " · " .. tostring(ritual.tempC) .. "度",
+      16, 70, BOT_W - 32, "center")
+    love.graphics.printf("茶烟轻轻的。慢慢来。", 16, 100, BOT_W - 32, "center")
   end
 
   love.graphics.setColor(0.35, 0.55, 0.35)
   love.graphics.rectangle("fill", 100, 210, 120, 22)
   love.graphics.setColor(1, 1, 1)
-  love.graphics.print((phase and phase.kind == "brew") and "A 下一步" or "A 确认", 128, 213)
+  love.graphics.printf((phase and phase.kind == "brew") and "A 下一步" or "A 确认", 100, 213, 120, "center")
   love.graphics.setColor(0.55, 0.4, 0.35)
   love.graphics.rectangle("fill", 230, 210, 70, 22)
   love.graphics.setColor(1, 1, 1)
-  love.graphics.print("取消", 248, 213)
+  love.graphics.printf("取消", 230, 213, 70, "center")
 end
 
 function T.potHint(ready, cups, highlight)

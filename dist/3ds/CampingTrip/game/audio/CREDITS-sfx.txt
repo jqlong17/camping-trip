@@ -18,3 +18,6 @@
 479041__felixblume__crickets-during-the-night….wav — amb_crickets (felixblume)
 741686__robertcrosley__small-tributary….wav — amb_creek (robertcrosley)
 741686__robertcrosley__small-tributary….wav — audio/3ds/amb_creek.mp3 真机副本（22050 Hz mono 64k）
+852844__kkenny101__gentle-shoreline-waves-generative-ambient-loopable.wav — amb_ocean_waves (kkenny101；请按 Freesound 原页面许可证署名)
+— 取原音频 270–316 秒，经 1 秒首尾交叉拼接为 45 秒循环母带；整体 -6dB
+— 桌面：48kHz OGG；audio/3ds：22050 Hz mono 64k MP3

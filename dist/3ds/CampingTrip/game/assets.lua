@@ -193,6 +193,28 @@ function Assets.ensureWalk(i)
   return store.walk[i]
 end
 
+-- TOP previews are intentionally a one-texture cache. A 320×180 PNG becomes a
+-- 512×256 POT texture on 3DS (~512 KiB RGBA8888); retaining every catalog
+-- option would waste tens of MiB. Bottom-screen icons remain in ritual bags.
+function Assets.ensureTopPreview(path)
+  if not path then return nil end
+  store.topPreview = store.topPreview or {}
+  if store.topPreview.path == path then return store.topPreview.image end
+  store.topPreview.path = path
+  store.topPreview.image = Assets.load(path)
+  return store.topPreview.image
+end
+
+function Assets.ensureCodexPreview(id)
+  if not id or id == "tea" then return nil end
+  return Assets.ensureTopPreview("assets/previews/codex/" .. id .. ".png")
+end
+
+function Assets.ensureCastPreview(i)
+  if not i then return nil end
+  return Assets.ensureTopPreview("assets/previews/cast/c" .. tostring(i) .. ".png")
+end
+
 function Assets.ensureRitual()
   if store.ritual and store.ritual.ready then return store.ritual end
   store.ritual = {
@@ -207,26 +229,6 @@ function Assets.ensureRitual()
   TentGear.loadPitchFrames(store.ritual, Assets.load)
   CupSip.loadChoiceAssets(store.ritual, Assets.load)
   CookMeal.loadChoiceAssets(store.ritual, Assets.load)
-  if AP then
-    store.ritual.tentColors, store.ritual.tentStyles, store.ritual.tentDoors = {}, {}, {}
-    for _, id in ipairs({ "sand", "pine", "mist" }) do
-      store.ritual.tentColors[id] = Assets.load(AP.tentGear("color_" .. id .. ".png"))
-    end
-    for _, id in ipairs({ "dome", "tunnel", "peak" }) do
-      store.ritual.tentStyles[id] = Assets.load(AP.tentGear("style_" .. id .. ".png"))
-    end
-    store.ritual.tentDoors.shut = Assets.load(AP.tentGear("door_shut.png"))
-    store.ritual.tentDoors.ajar = Assets.load(AP.tentGear("door_ajar.png"))
-    store.ritual.tentPitch = {}
-    for _, style in ipairs({ "dome", "tunnel", "peak" }) do
-      for _, color in ipairs({ "sand", "pine", "mist" }) do
-        for _, door in ipairs({ "shut", "ajar" }) do
-          local key = "pitch_" .. style .. "_" .. color .. "_" .. door
-          store.ritual.tentPitch[key] = Assets.load(AP.tentCamp(key .. ".png"))
-        end
-      end
-    end
-  end
   return store.ritual
 end
 
@@ -255,6 +257,7 @@ function Assets.loadBoot()
   store.titleBot = Assets.load(AP.ui("title_bot.png"))
   store.packBg = Assets.load(AP.ui("ui_pack_bg.png"))
   store.story, store.cast, store.walk = {}, {}, {}
+  store.topPreview = {}
   store.ritual = { ready = false, drip = {}, fishAnim = {} }
   if host and host.appendLoadLog then
     host.appendLoadLog("loadAssets title done fails=" .. loadFailCount)

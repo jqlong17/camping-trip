@@ -47,6 +47,7 @@ function PlayDraw.ritualOverlay()
   local context = {
     TOP_W = R.TOP_W, TOP_H = R.TOP_H, BOT_W = R.BOT_W,
     uiFont = R.uiFont, drawFitted = Assets.drawFitted,
+    loadTopPreview = Assets.ensureTopPreview,
   }
   local assets = Assets.get().ritual
   if ritual.kind == "drip" then DripBrew.drawTop(ritual, assets, context); return end
@@ -54,22 +55,7 @@ function PlayDraw.ritualOverlay()
   if ritual.kind == "rod" then FishRod.drawTop(ritual, assets, context); return end
   if ritual.kind == "tent" then TentGear.drawTop(ritual, assets, context); return end
   if ritual.kind == "cup_sip" then CupSip.drawTop(ritual, assets, context); return end
-  if ritual.kind == "fan" then
-    love.graphics.setColor(0, 0, 0, 0.35)
-    love.graphics.rectangle("fill", 0, 0, R.TOP_W, R.TOP_H)
-    local image = assets and assets.fanAnim and assets.fanAnim[ritual.step]
-    if image then
-      local iw, ih, scale = image:getWidth(), image:getHeight(), 3
-      love.graphics.setColor(1, 1, 1, 1)
-      love.graphics.draw(image, (R.TOP_W - iw * scale) / 2, (R.TOP_H - ih * scale) / 2 - 10, 0, scale, scale)
-    end
-    if R.uiFont then love.graphics.setFont(R.uiFont) end
-    local title = "扇子 · " .. ritual.step .. "/4"
-    love.graphics.setColor(0.08, 0.08, 0.08, 0.85)
-    love.graphics.rectangle("fill", 12, 12, (R.uiFont and R.uiFont:getWidth(title) or 80) + 16, 20)
-    love.graphics.setColor(1, 0.95, 0.85)
-    love.graphics.print(title, 20, 14)
-  end
+  if ritual.kind == "cook" then CookMeal.drawTop(ritual, assets, context); return end
 end
 
 local function gearGrid()
@@ -141,17 +127,7 @@ function PlayDraw.bottom()
     if R.ritual.kind == "rod" then FishRod.drawBottom(R.ritual, assets, context); return end
     if R.ritual.kind == "tent" then TentGear.drawBottom(R.ritual, assets, context); return end
     if R.ritual.kind == "cup_sip" then CupSip.drawBottom(R.ritual, assets, context); return end
-    if R.ritual.kind == "fan" then
-      love.graphics.setColor(0.32, 0.22, 0.14)
-      love.graphics.rectangle("fill", 6, 6, R.BOT_W - 12, 28)
-      love.graphics.setColor(1, 0.96, 0.88)
-      love.graphics.print("扇风短片 · " .. R.ritual.step .. "/4", 14, 12)
-      love.graphics.setColor(0.35, 0.55, 0.35)
-      love.graphics.rectangle("fill", 100, 210, 120, 22)
-      love.graphics.setColor(1, 1, 1)
-      love.graphics.print("A 跳过", 132, 213)
-      return
-    end
+    if R.ritual.kind == "cook" then CookMeal.drawBottom(R.ritual, assets, context); return end
   end
   if R.cupPick then cupPicker(); return end
 
@@ -168,15 +144,13 @@ function PlayDraw.bottom()
     love.graphics.setColor(0.26, 0.18, 0.10)
     love.graphics.print(hint, 126, 13)
   end
-  if (haul.fruit or 0) > 0 or Persist.fishTotalOf(haul.fish) > 0 then
-    love.graphics.setColor(0.98, 0.94, 0.76)
-    love.graphics.rectangle("fill", 6, 36, R.BOT_W - 12, 18)
-    love.graphics.setColor(0.26, 0.18, 0.10)
-    love.graphics.print(string.format(
-      "收获 · 果%d 鱼%d 咖啡%d 茶%d",
-      haul.fruit or 0, Persist.fishTotalOf(haul.fish), haul.coffee or 0, haul.tea or 0
-    ), 14, 38)
-  end
+  love.graphics.setColor(0.98, 0.94, 0.76)
+  love.graphics.rectangle("fill", 6, 36, R.BOT_W - 12, 20)
+  love.graphics.setColor(0.26, 0.18, 0.10)
+  love.graphics.print(string.format(
+    "收获 · 果%d 鱼%d 咖啡%d 茶%d",
+    haul.fruit or 0, Persist.fishTotalOf(haul.fish), haul.coffee or 0, haul.tea or 0
+  ), 14, 39)
   gearGrid()
   love.graphics.setColor(0.45, 0.55, 0.4)
   love.graphics.rectangle("fill", 20, 210, 130, 22)

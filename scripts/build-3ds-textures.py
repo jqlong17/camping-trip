@@ -10,6 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ASSETS = ROOT / "game" / "assets"
 VENDORED = ROOT / "vendor" / "tools" / "tex3ds"
+FONT_SUBSET_BUILDER = ROOT / "scripts" / "build-font-subset.py"
 
 
 def find_tex3ds() -> str:
@@ -33,6 +34,10 @@ def is_runtime(path: Path) -> bool:
 
 
 def main() -> int:
+    # Rebuild first so every deploy/build contains all current player-facing
+    # copy. The font builder exits non-zero when either the source or output
+    # cannot cover a required glyph, turning silent tofu into a build failure.
+    subprocess.run([sys.executable, str(FONT_SUBSET_BUILDER)], check=True)
     tool = find_tex3ds()
     pngs = sorted(p for p in ASSETS.rglob("*.png") if is_runtime(p))
     built = skipped = 0

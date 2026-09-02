@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "views": [
+    {
+      "id": "VIEW-MTIFED73",
+      "name": "资源关系视图",
+      "objectTypeIds": [
+        "ONT-301",
+        "ONT-101"
+      ],
+      "relationTypeIds": [
+        "ONT-601"
+      ],
+      "conditionMode": "all",
+      "conditions": [],
+      "displayMode": "graph",
+      "nodeFields": [
+        {
+          "id": "field-id",
+          "title": "编号",
+          "renderer": "identifier",
+          "source": {
+            "kind": "field",
+            "field": "id"
+          }
+        },
+        {
+          "id": "field-label",
+          "title": "label",
+          "renderer": "text",
+          "source": {
+            "kind": "field",
+            "field": "label"
+          }
+        },
+        {
+          "id": "field-type",
+          "title": "类型",
+          "renderer": "badge",
+          "source": {
+            "kind": "field",
+            "field": "ontologyTypeId"
+          }
+        }
+      ]
+    }
+  ]
+}

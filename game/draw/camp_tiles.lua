@@ -14,6 +14,11 @@ function CampTiles.getCanvas()
   return campGroundCanvas
 end
 
+function CampTiles.resetCanvas()
+  campGroundCanvas = nil
+  campGroundCanvasTried = false
+end
+
 function CampTiles.drawWaterSparkles(px, py, tx, ty)
   local waterPhase = host.getWaterPhase()
   local phase = waterPhase * 3 + tx * 1.7 + ty * 2.3
@@ -34,7 +39,7 @@ function CampTiles.drawGround(t, px, py, tx, ty)
   local waterPhase = host.getWaterPhase()
   love.graphics.setColor(1, 1, 1, 1)
   if t == 2 or t == 8 then
-    local wi = math.floor(waterPhase) % 4
+    local wi = (math.floor(waterPhase) + tx * 5 + ty * 3) % 4
     local sheet = (t == 8 and assets.shallow and assets.shallow[wi]) or (assets.water and assets.water[wi])
     if sheet then love.graphics.draw(sheet, px, py)
     else
@@ -43,12 +48,6 @@ function CampTiles.drawGround(t, px, py, tx, ty)
     end
     CampTiles.drawWaterSparkles(px, py, tx, ty)
     love.graphics.setColor(1, 1, 1, 1)
-    if assets.shore then
-      if not CM.isWater(CM.tileAt(tx + 1, ty)) and assets.shore.E then love.graphics.draw(assets.shore.E, px, py) end
-      if not CM.isWater(CM.tileAt(tx - 1, ty)) and assets.shore.W then love.graphics.draw(assets.shore.W, px, py) end
-      if not CM.isWater(CM.tileAt(tx, ty - 1)) and assets.shore.N then love.graphics.draw(assets.shore.N, px, py) end
-      if not CM.isWater(CM.tileAt(tx, ty + 1)) and assets.shore.S then love.graphics.draw(assets.shore.S, px, py) end
-    end
     return
   end
   -- 帐篷格(5)只表示道具层；地面仍用搭帐前的土地，避免误画成整格绿草
@@ -62,7 +61,9 @@ function CampTiles.drawGround(t, px, py, tx, ty)
       end
     end
   end
-  if ground == 7 and assets.dirt and assets.dirt[(tx * 3 + ty * 5) % 4] then
+  local useDirt = (Destinations.currentId() == "forest" and ground == 7)
+    or (Destinations.currentId() == "coast" and ground == 9)
+  if useDirt and assets.dirt and assets.dirt[(tx * 3 + ty * 5) % 4] then
     love.graphics.draw(assets.dirt[(tx * 3 + ty * 5) % 4], px, py)
     if assets.dirtFringe then
       if CM.isMeadow(CM.tileAt(tx, ty - 1)) and assets.dirtFringe.N then love.graphics.draw(assets.dirtFringe.N, px, py) end
@@ -81,14 +82,21 @@ function CampTiles.drawGround(t, px, py, tx, ty)
   local W = CM.isWater(CM.tileAt(tx - 1, ty))
   local N = CM.isWater(CM.tileAt(tx, ty - 1))
   local S = CM.isWater(CM.tileAt(tx, ty + 1))
-  if E and assets.shore.E then love.graphics.draw(assets.shore.E, px, py) end
-  if W and assets.shore.W then love.graphics.draw(assets.shore.W, px, py) end
-  if N and assets.shore.N then love.graphics.draw(assets.shore.N, px, py) end
-  if S and assets.shore.S then love.graphics.draw(assets.shore.S, px, py) end
-  if N and E and assets.shore.NE then love.graphics.draw(assets.shore.NE, px, py) end
-  if N and W and assets.shore.NW then love.graphics.draw(assets.shore.NW, px, py) end
-  if S and E and assets.shore.SE then love.graphics.draw(assets.shore.SE, px, py) end
-  if S and W and assets.shore.SW then love.graphics.draw(assets.shore.SW, px, py) end
+  local covered = {}
+  for _, corner in ipairs({
+    { "NE", "N", "E", N and E }, { "NW", "N", "W", N and W },
+    { "SE", "S", "E", S and E }, { "SW", "S", "W", S and W },
+  }) do
+    if corner[4] and assets.shore[corner[1]] then
+      love.graphics.draw(assets.shore[corner[1]], px, py)
+      covered[corner[2]], covered[corner[3]] = true, true
+    end
+  end
+  for _, edge in ipairs({ { "N", N }, { "S", S }, { "E", E }, { "W", W } }) do
+    if edge[2] and not covered[edge[1]] and assets.shore[edge[1]] then
+      love.graphics.draw(assets.shore[edge[1]], px, py)
+    end
+  end
 end
 
 function CampTiles.drawDecalsForRow(rowY)
@@ -112,6 +120,11 @@ function CampTiles.drawDecalsForRow(rowY)
       if img then love.graphics.draw(img, px + 2, py + 6) end
     elseif d.kind == "pier" and assets.pier then
       love.graphics.draw(assets.pier, px + TILE - assets.pier:getWidth() + 4, py + 4)
+    elseif d.kind == "beach-grass" and assets.flowers and assets.flowers[0] then
+      local img = assets.flowers[0]
+      love.graphics.draw(img, px + (TILE - img:getWidth()) / 2, py + TILE - img:getHeight())
+    elseif d.kind == "driftwood" and assets.log then
+      love.graphics.draw(assets.log, px + (TILE - assets.log:getWidth()) / 2, py + TILE - assets.log:getHeight())
     end
   end
 end
@@ -126,6 +139,11 @@ function CampTiles.drawDropShadow(px, py, kind)
     img, ox, oy = assets.shadowTree or assets.shadow, 5, 3
   end
   if not img then return end
+  if Destinations.currentId() == "coast" then
+    -- 日出从左侧来光，影子向右；日落反向且略长。
+    if Time.index() == 1 then ox = ox + 3
+    elseif Time.index() == 4 then ox = ox - 7 end
+  end
   local iw, ih = img:getWidth(), img:getHeight()
   love.graphics.setColor(1, 1, 1, 0.92)
   love.graphics.draw(img, px + TILE / 2 - iw / 2 + ox, py + TILE - ih + oy)
@@ -179,12 +197,13 @@ function CampTiles.drawProp(t, px, py, tx, ty)
       love.graphics.setColor(1, 1, 1, 1)
       local iw, ih = img:getWidth(), img:getHeight()
       CampTiles.drawDropShadow(px, py, "sm")
-      -- 碰撞仍占一格，视觉放大到约 1.75 格，保持地图上清楚可辨。
-      local targetW, targetH = TILE * 1.75, TILE * 1.6
-      local scale = math.min(targetW / math.max(iw, 1), targetH / math.max(ih, 1))
-      -- gear/tent.png 的实体底边在源图 y=37/40，画布底部另有透明留白。
-      -- 按实体底边而非整张画布落地，并下压 1px，避免帐篷悬空。
-      local opaqueBottom = ih * (37 / 40)
+      -- 展开态使用独立 96×72 CKE 资源，以 0.5× 显示 2× 像素密度：
+      -- 有效轮廓 92×68px → 46×34px，约 2.9×2.1 格。
+      -- 收纳卷仍保持原尺寸，避免未展开时像一顶完整帐篷。
+      local scale = tentOpen and 0.5 or math.min(1, (TILE * 1.75) / math.max(iw, 1))
+      -- 高清展开图实体 bbox 底边 y=70/72；收纳图为 y=18/20。
+      -- 始终按实体底边落地，不按透明画布底部，避免悬空。
+      local opaqueBottom = tentOpen and 70 or (ih * 18 / 20)
       love.graphics.draw(
         img,
         px + (TILE - iw * scale) / 2,
@@ -215,6 +234,9 @@ end
 function CampTiles.drawCreekLite()
   local assets = host.Assets.get()
   if not assets.campStaticBase then return end
+  -- 海边底图使用一整条连续文生图浪带；旧的逐格闪点与等距白条会
+  -- 重新暴露 16px 网格，看起来像棋盘和人造栏杆，因此不再叠加。
+  if Destinations.currentId() == "coast" then return end
   local TILE = host.TILE
   local waterPhase = host.getWaterPhase()
   for _, wt in ipairs(host.CampMap.getWaterTiles()) do

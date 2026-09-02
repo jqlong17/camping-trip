@@ -15,14 +15,14 @@ function Flow.syncSceneBgm()
   if R.scene == "title" or R.scene == "codex" or R.scene == "about"
       or R.scene == "homecoming" or R.scene == "diary" then
     if Audio.bgm.title then Audio.playBgm(Audio.bgm.title) end
-  elseif R.scene == "prologue" or R.scene == "depart" or R.scene == "cast" then
+  elseif R.scene == "prologue" or R.scene == "depart" or R.scene == "cast" or R.scene == "destination" then
     if Audio.bgm.morning then Audio.playBgm(Audio.bgm.morning) end
   end
 end
 
 function Flow.needsQuitConfirm()
   local s = R.scene
-  return s == "prologue" or s == "cast" or s == "depart"
+  return s == "prologue" or s == "cast" or s == "destination" or s == "depart"
       or s == "play" or s == "homecoming" or s == "diary"
 end
 
@@ -113,10 +113,44 @@ function Flow.goCast()
   host.say("这次谁去？选好后按 A 确认", 3)
 end
 
+function Flow.goDestination()
+  R.scene = "destination"
+  State.destination.i = State.destination.i or 1
+  Toast.clear()
+  Flow.syncSceneBgm()
+end
+
+function Flow.nudgeDestination(delta)
+  local count = #State.destination.ids
+  State.destination.i = ((State.destination.i - 1 + delta) % count) + 1
+  Audio.playSfx("ui_move")
+end
+
+function Flow.activateDestination(id)
+  local pack = Destinations.set(id)
+  R.destinationId = pack.id
+  State.trip.destinationId = pack.id
+  State.save.data.lastDestinationId = pack.id
+  Story.setDestination(pack)
+  CampPreload.reset(pack.id)
+  CampMap.build()
+  CampMap.indexRenderData()
+  CampPreload.begin("destination_selected")
+  return pack
+end
+
+function Flow.confirmDestination()
+  local id = State.destination.ids[State.destination.i] or "forest"
+  Flow.activateDestination(id)
+  Persist.write()
+  Flow.goDepart()
+end
+
 function Flow.goDepart()
   R.scene = "depart"
   Story.depart.i = 1
-  host.ensureStory("d1")
+  local firstBeat = Story.depart.beats[1]
+  host.ensureStory(firstBeat and firstBeat.img or "d1")
   Toast.clear()
 end
 
@@ -124,7 +158,8 @@ function Flow.goPlay()
   R.scene = "play"
   CampPreload.ensure()
   host.ensureWalk(R.player.castId or 1)
-  R.player.x, R.player.y = 10, 9
+  local spawn = Destinations.current().spawn
+  R.player.x, R.player.y = spawn.x, spawn.y
   R.player.facing, R.player.walkFrame, R.player.walkTimer = 0, 0, 0
   R.selected = 1
   Time.resetForCamp()
@@ -147,17 +182,32 @@ function Flow.goPlay()
   critters.birdT, critters.bugT = 0.4, 0.6
   Audio.stopBgm()
   Audio.syncPlayBgm()
-  host.say("到了 · 林间有小溪，可以趟过去", 3.5)
+  if Destinations.currentId() == "coast" then
+    host.say("到了 · 清晨的海面正亮起来", 3.5)
+  else
+    host.say("到了 · 林间有小溪，可以趟过去", 3.5)
+  end
 end
 
 function Flow.goDiary()
   R.scene = "diary"
+  R.diaryPage = 1
   host.ensureStory("diary_desk")
   host.ensureStory("diary_tn")
   host.ensureStory("diary")
   Audio.stopAmb()
   Flow.syncSceneBgm()
   Toast.clear()
+end
+
+function Flow.nudgeDiary(delta)
+  if R.scene ~= "diary" then return end
+  local count = 3
+  local next = math.max(1, math.min(count, (R.diaryPage or 1) + delta))
+  if next ~= R.diaryPage then
+    R.diaryPage = next
+    Audio.playSfx("ui_move")
+  end
 end
 
 function Flow.finishDiary()
@@ -180,7 +230,7 @@ function Flow.advancePrologue()
   if Story.advance("prologue") then return end
   if State.save.data.castChosen then
     Session.applyCast(State.save.data.castId or 1)
-    Flow.goDepart()
+    Flow.goDestination()
   else
     Flow.goCast()
   end
@@ -200,7 +250,12 @@ function Flow.confirmCast()
   State.save.data.castId = State.cast.i
   State.save.data.castChosen = true
   Persist.write()
-  Flow.goDepart()
+  if State.castMode == "title" then
+    State.castMode = "journey"
+    Flow.goTitle()
+  else
+    Flow.goDestination()
+  end
 end
 
 function Flow.startJourney()
@@ -218,9 +273,10 @@ function Flow.confirmMenu()
   elseif item.id == "continue" then
     if State.save.data.castChosen or (State.save.data.trips or 0) > 0 then
       Session.applyCast(State.save.data.castId or 1)
+      Flow.activateDestination(State.save.data.lastDestinationId or "forest")
       Flow.goPlay()
     else host.say("还没有存档", 2) end
-  elseif item.id == "cast" then Flow.goCast()
+  elseif item.id == "cast" then State.castMode = "title"; Flow.goCast()
   elseif item.id == "codex" then
     R.scene, R.codex.i = "codex", 1
     CampPreload.ensure()
@@ -237,6 +293,7 @@ function Flow.advancePrimary()
   if R.scene == "title" then Flow.confirmMenu()
   elseif R.scene == "prologue" then Audio.playSfx("ui_ok"); Flow.advancePrologue()
   elseif R.scene == "cast" then Flow.confirmCast()
+  elseif R.scene == "destination" then Flow.confirmDestination()
   elseif R.scene == "depart" then Audio.playSfx("ui_ok"); Flow.advanceDepart()
   elseif R.scene == "play" then Session.tryUseGear()
   elseif R.scene == "homecoming" then Audio.playSfx("ui_ok"); Flow.advanceHome()

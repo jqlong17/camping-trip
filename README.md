@@ -143,6 +143,38 @@ love game --playtest
 LINJIAN_PLAYTEST_DESTINATION=forest love game --playtest
 ```
 
+## 故事资源图谱（开发工作台）
+
+仓库里还有一个本地网页工作台，用来看整局故事怎么走、每张图从哪来、营地地砖怎么摆。它**不会**打进 3DS 游戏包，只给一起开发的人用。画布像一张可缩放的工作流：左边搜编号，中间是节点和连线，右边看原图、资源和代码出处。
+
+```bash
+cd tools/story-atlas
+npm install
+npm run dev
+```
+
+浏览器打开 [http://127.0.0.1:5173/](http://127.0.0.1:5173/)。`npm run dev` 会先扫描仓库里的剧情和资源。
+
+| 故事实例 · 主线 | 含玩法展开 |
+|:---:|:---:|
+| <img src="docs/screenshots/atlas-01-story.png" alt="故事资源图谱主线" width="420"> | <img src="docs/screenshots/atlas-02-gameplay.png" alt="故事资源图谱含玩法" width="420"> |
+| **场景布局** | **资源库** |
+| <img src="docs/screenshots/atlas-03-layout.png" alt="林间场景布局" width="420"> | <img src="docs/screenshots/atlas-04-resources.png" alt="资源库实例视图" width="420"> |
+
+怎么用：
+
+1. **故事实例视图**：看玩家从标题、序章、选角、出发，走到营地和日记的整条周末。默认先看 **主线**。
+2. **含玩法 / 全部**：把帐篷、手冲、泡茶、钓鱼、做饭的步骤节点展开，像一张大工作流。
+3. **点一个节点**：右侧会显示稳定编号（`SCN` / `BEAT` / `ACT` / `RES`）、画面预览、制作源。可以用 **打开 / 复制路径 / Finder** 跳到仓库里的文件。
+4. **搜索框**：输入 `BEAT-001`、`tent` 或文件名，直接定位。
+5. **林间 / 海边**：只看一个目的地的分镜和营地。
+6. **场景布局视图**：检查林间或海边地砖、水系、植被实际摆在哪一格。
+7. **资源库实例视图**：浏览全部 PNG、音频、字体；可按类别、状态筛选。
+8. **遗漏审计**：找断开的剧情、未关联资源、缺 T3X。
+9. 改完 Lua、分镜或 `game/assets` 之后，再跑一次 `npm run scan`（或重启 `npm run dev`）刷新图谱。
+
+更细的编号规则见 [docs/故事资源图谱-SPEC.md](./docs/故事资源图谱-SPEC.md)，工具自己的说明在 [tools/story-atlas/README.md](./tools/story-atlas/README.md)。
+
 ## 欢迎一起来开发
 
 露营之旅还很小。林间和海边只是两个周末，手冲、泡茶、做饭、钓鱼也还可以更丰盛。我们希望它慢慢变成一个**大家一起养的营地**，而不是一个人关起门来做完。
@@ -166,6 +198,8 @@ LINJIAN_PLAYTEST_DESTINATION=forest love game --playtest
 | [docs/游戏设计-SPEC.md](./docs/游戏设计-SPEC.md) | 体验规格和 DEV 日志 |
 | [docs/动画与交互-SPEC.md](./docs/动画与交互-SPEC.md) | 四向精灵和仪式 |
 | [docs/3DS真机开发踩坑与发布准则.md](./docs/3DS真机开发踩坑与发布准则.md) | 真机坑和发布边界 |
+| [docs/故事资源图谱-SPEC.md](./docs/故事资源图谱-SPEC.md) | 开发工作台编号和视图 |
+| [tools/story-atlas/README.md](./tools/story-atlas/README.md) | 工作台启动命令 |
 
 ## 声明
 

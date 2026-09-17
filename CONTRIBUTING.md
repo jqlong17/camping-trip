@@ -9,6 +9,7 @@
 - 开 [Issue](https://github.com/jqlong17/camping-trip/issues) 说卡顿、缺字、想加的装备，或某台真机上的现象
 - 提 Pull Request：修 bug、加内容、补文档都可以
 - 如果是第一次来，先看 [README](./README.md) 的安装说明，以及 [docs/怎么玩.md](./docs/怎么玩.md)
+- 要摸清故事节点和资源血缘，打开本地工作台：`cd tools/story-atlas && npm install && npm run dev`，浏览器访问 `http://127.0.0.1:5173/`
 
 特别欢迎：
 

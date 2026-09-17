@@ -492,6 +492,7 @@ SFX **不必用 Suno**（不擅长短反馈音）。放入 `game/audio/`，P2 �
 | **DEV-123** | 2026-09-13 | done | **真机林间掉到十几帧**：`load_report` 显示 `creek mode=stream` 后 70/75 帧都慢，停了也不恢复；手冲 9.8s、泡茶 11.7s 后成片 `Failed to create Texture`。溪水改 PCM 静态循环；仪式按阶段加载并在换仪式时释放上一套。 |
 | **DEV-124** | 2026-09-13 | done | **出发预载约 20 秒**：真机 `ensureCamp` 20053ms / 24 步，一半在鱼鸟虫，收获图标未使用还占 2.2s，展开帐篷出发时看不见。真机 essential 只预载看得见的（静态底、海面、一张影子、收纳帐篷+篝火、当前立绘+走表、装备图标）；鱼鸟虫进营后 `after()` 补；`tent_open_hd` 搭帐时再读；删 `fruitIcon`/`fishIcons`。`ready()` 在 essential 完成后即可进营，禁止绘制路径再 `ensure()`。 |
 | **DEV-125** | 2026-09-18 | done | **开源到 GitHub**：新建公开仓库 `jqlong17/camping-trip`，README 写清 Homebrew `.3dsx` 与 FBI CIA 两条安装路径，并鼓励共建。Release 提供 `CampingTrip.cia` 与 `CampingTrip-3dsx.zip`。日常开发仍以 3dsx 为准；CIA 仅作发行物，禁止放进 `sd:/3ds/CampingTrip/`。 |
+| **DEV-126** | 2026-09-18 | done | **README 补开发工作台**：把 Story Atlas（故事资源图谱）的启动方式和四个核心视图截图写进公开 README，说明主线/含玩法、场景布局、资源库怎么用。 |
 | **DEV-012** | — | planned | **P1** 加深：更多时段事件（搭帐篷动画、手冲小游戏） |
 | **DEV-014** | — | planned | **P3** 精修回家：次日收拾动画、周末计数 |
 | **DEV-015** | 2026-08-30 | done | 基础 SFX 清单齐：UI + 脚步/帐篷/手冲/杯子/扇子/点灯 |

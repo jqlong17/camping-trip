@@ -4,9 +4,44 @@ Nintendo 3DS 上的休闲露营游戏。爱好向，不上架，也和任天堂�
 
 一个夏天，上班族把周末逃进林间或海边：搭帐篷、手冲咖啡、泡一壶茶、在水边钓鱼，看天色从清晨走到夜里，点起营火，第二天再收拾回家。下一周还可以再来。
 
-<p align="center">
-  <img src="game/assets/ui/title_top.png" alt="露营之旅标题画面" width="400">
-</p>
+## 在 Mac 上启动
+
+先安装 [LÖVE 11](https://love2d.org/)（Homebrew）：
+
+```bash
+brew install --cask love
+```
+
+然后在仓库根目录打开游戏：
+
+```bash
+cd /Users/ruska/projects/3ds/linjian
+love game
+```
+
+会弹出一个 400×480 的窗口，上屏和下屏叠在一起。方向键或 WASD 走路，鼠标点下屏背包，A / 回车确认，B / Esc 返回。若 macOS 提示无法验证，到系统设置 → 隐私与安全性 → 仍要打开。
+
+从 GitHub 克隆的人也一样：
+
+```bash
+git clone https://github.com/jqlong17/camping-trip.git
+cd camping-trip
+love game
+```
+
+## 画面
+
+桌面预览是上下叠屏，和真机双屏对应。
+
+| 标题 | 林间营地 |
+|:---:|:---:|
+| <img src="docs/screenshots/01-title.png" alt="标题画面" width="280"> | <img src="docs/screenshots/02-forest-camp.png" alt="林间营地" width="280"> |
+| **海边清晨** | **搭好帐篷** |
+| <img src="docs/screenshots/03-coast-sunrise.png" alt="海边清晨" width="280"> | <img src="docs/screenshots/04-tent.png" alt="林间帐篷" width="280"> |
+| **手冲选豆** | **泡茶出汤** |
+| <img src="docs/screenshots/05-drip.png" alt="手冲选豆" width="280"> | <img src="docs/screenshots/06-tea.png" alt="泡茶出汤" width="280"> |
+| **夜里点灯** | **周末日记** |
+| <img src="docs/screenshots/07-night.png" alt="林间夜里点灯" width="280"> | <img src="docs/screenshots/08-diary.png" alt="周末日记" width="280"> |
 
 **这是一个刚开源的小营地。** 缺一起搭帐篷的人：写代码、画像素、补目的地、在更多真机上试玩，都算共建。如果你也喜欢 3DS 和安静的周末，欢迎直接开 Issue 或 Pull Request，细节见 [CONTRIBUTING.md](./CONTRIBUTING.md)。
 
@@ -99,16 +134,9 @@ sd:/cias/CampingTrip.cia
 
 更完整的操作表在 [docs/怎么玩.md](./docs/怎么玩.md)。
 
-## 电脑上预览（给一起开发的人）
+## 电脑上自测
 
-```bash
-brew install --cask love   # 若未安装 LÖVE 11
-git clone https://github.com/jqlong17/camping-trip.git
-cd camping-trip
-love game
-```
-
-上下屏会叠成 400×480。WASD / 方向键走路，鼠标点下屏背包。
+改完玩法或美术后：
 
 ```bash
 love game --playtest

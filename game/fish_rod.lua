@@ -221,7 +221,7 @@ end
 
 function F.start()
   local h = H()
-  h.ensureRitual()
+  h.ensureRitual("rod")
   h.setRitual({
     kind = "rod",
     phase = "spot",

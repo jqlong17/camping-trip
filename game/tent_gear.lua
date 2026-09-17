@@ -29,6 +29,7 @@ function T.start()
   end
 
   if h.pitchTent() then
+    if h.ensureTentOpen then h.ensureTentOpen() end
     T.mood = "米白尖顶帐篷 · 今晚的窝搭好了"
     h.playSfx("tent")
     h.say("帐篷展开了。", 2.5)

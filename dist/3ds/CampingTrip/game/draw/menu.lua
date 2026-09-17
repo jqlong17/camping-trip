@@ -60,6 +60,12 @@ function MenuDraw.titleBottom()
     local lw = R.uiFont and R.uiFont:getWidth(label) or 80
     love.graphics.print(label, x0 + math.floor((width - lw) / 2), y + 8)
   end
+  if R.departPendingPlay then
+    love.graphics.setColor(0.18, 0.12, 0.08)
+    local hint = "正在抵达营地…"
+    local hw = R.uiFont and R.uiFont:getWidth(hint) or 80
+    love.graphics.print(hint, math.floor((R.BOT_W - hw) / 2), 220)
+  end
 end
 
 function MenuDraw.codexTop()
@@ -122,8 +128,11 @@ function MenuDraw.codexBottom()
     if gear.icon then
       local iw, ih = gear.icon:getWidth(), gear.icon:getHeight()
       local scale = math.min(36 / iw, 28 / ih)
+      local ix = gear.x + (80 - iw * scale) / 2
+      love.graphics.setColor(0.45, 0.34, 0.22, 1)
+      love.graphics.rectangle("fill", gear.x + 16, gear.y + 5, 48, 32)
       love.graphics.setColor(1, 1, 1, 1)
-      love.graphics.draw(gear.icon, gear.x + (80 - iw * scale) / 2, gear.y + 4, 0, scale, scale)
+      love.graphics.draw(gear.icon, ix, gear.y + 4, 0, scale, scale)
     end
     love.graphics.setColor(0.22, 0.16, 0.1)
     local width = R.uiFont and R.uiFont:getWidth(gear.name) or 28

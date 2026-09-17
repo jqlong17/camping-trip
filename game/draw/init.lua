@@ -32,7 +32,8 @@ function Draw.bottom()
   elseif R.scene == "prologue" then StoryDraw.storyBottom("按 A 继续故事")
   elseif R.scene == "cast" then StoryDraw.castBottom()
   elseif R.scene == "destination" then StoryDraw.destinationBottom()
-  elseif R.scene == "depart" then StoryDraw.storyBottom("按 A 前往营地")
+  elseif R.scene == "depart" then
+    StoryDraw.storyBottom(R.departPendingPlay and "正在抵达营地…" or "按 A 前往营地")
   elseif R.scene == "homecoming" then StoryDraw.storyBottom("按 A 前往日记")
   elseif R.scene == "diary" then StoryDraw.diaryBottom()
   else PlayDraw.bottom() end

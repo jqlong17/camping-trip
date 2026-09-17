@@ -1,8 +1,8 @@
 {
   "meta": {
     "version": 1,
-    "generatedAt": "2026-09-02T00:34:19.391003+00:00",
-    "resourceCount": 630,
+    "generatedAt": "2026-09-12T08:25:35.336951+00:00",
+    "resourceCount": 634,
     "nodeCount": 66,
     "edgeCount": 95,
     "runtimeSceneCount": 10,
@@ -11,7 +11,7 @@
       "active": 374,
       "backup": 33,
       "legacy": 46,
-      "source": 169,
+      "source": 173,
       "unlinked": 8
     }
   },
@@ -4435,6 +4435,98 @@
       ],
       "bytes": 878488,
       "createdAt": "2026-08-31T12:33:09.393078+00:00",
+      "previewable": true,
+      "pairedT3x": null,
+      "nodeIds": [],
+      "codeRefs": [],
+      "sourceCandidates": [],
+      "provenance": []
+    },
+    {
+      "id": "RES-0638",
+      "path": "docs/promo/camp-workbench/camp-workbench-master-scene.png",
+      "name": "camp-workbench-master-scene.png",
+      "kind": "image",
+      "category": "source/promo",
+      "displayRole": "runtime-media",
+      "status": "source",
+      "inferredStatus": "source",
+      "reviewNote": "",
+      "size": [
+        1280,
+        720
+      ],
+      "bytes": 484944,
+      "createdAt": "2026-09-12T08:22:04.036969+00:00",
+      "previewable": true,
+      "pairedT3x": null,
+      "nodeIds": [],
+      "codeRefs": [],
+      "sourceCandidates": [],
+      "provenance": []
+    },
+    {
+      "id": "RES-0639",
+      "path": "docs/promo/camp-workbench/camp-workbench-sheet-furniture.png",
+      "name": "camp-workbench-sheet-furniture.png",
+      "kind": "image",
+      "category": "source/promo",
+      "displayRole": "runtime-media",
+      "status": "source",
+      "inferredStatus": "source",
+      "reviewNote": "",
+      "size": [
+        1280,
+        720
+      ],
+      "bytes": 246555,
+      "createdAt": "2026-09-12T08:22:04.039062+00:00",
+      "previewable": true,
+      "pairedT3x": null,
+      "nodeIds": [],
+      "codeRefs": [],
+      "sourceCandidates": [],
+      "provenance": []
+    },
+    {
+      "id": "RES-0640",
+      "path": "docs/promo/camp-workbench/camp-workbench-sheet-props.png",
+      "name": "camp-workbench-sheet-props.png",
+      "kind": "image",
+      "category": "source/promo",
+      "displayRole": "runtime-media",
+      "status": "source",
+      "inferredStatus": "source",
+      "reviewNote": "",
+      "size": [
+        1280,
+        720
+      ],
+      "bytes": 249966,
+      "createdAt": "2026-09-12T08:22:04.040462+00:00",
+      "previewable": true,
+      "pairedT3x": null,
+      "nodeIds": [],
+      "codeRefs": [],
+      "sourceCandidates": [],
+      "provenance": []
+    },
+    {
+      "id": "RES-0641",
+      "path": "docs/promo/camp-workbench/camp-workbench-visual-bible.png",
+      "name": "camp-workbench-visual-bible.png",
+      "kind": "image",
+      "category": "source/promo",
+      "displayRole": "runtime-media",
+      "status": "source",
+      "inferredStatus": "source",
+      "reviewNote": "",
+      "size": [
+        1280,
+        720
+      ],
+      "bytes": 190027,
+      "createdAt": "2026-09-12T08:22:04.042796+00:00",
       "previewable": true,
       "pairedT3x": null,
       "nodeIds": [],
@@ -42262,6 +42354,102 @@
           "createdAt": "2026-08-31T12:33:09.393078+00:00",
           "width": 1024,
           "height": 1024,
+          "previewable": true,
+          "pairedT3x": null,
+          "nodeCount": 0,
+          "hasProvenance": false
+        }
+      },
+      {
+        "id": "RES-0638",
+        "ontologyTypeId": "ONT-301",
+        "roleTypeIds": [
+          "ONT-306"
+        ],
+        "entityKind": "resource",
+        "label": "camp-workbench-master-scene.png",
+        "source": "filesystem-scan",
+        "attributes": {
+          "path": "docs/promo/camp-workbench/camp-workbench-master-scene.png",
+          "kind": "image",
+          "category": "source/promo",
+          "status": "source",
+          "bytes": 484944,
+          "createdAt": "2026-09-12T08:22:04.036969+00:00",
+          "width": 1280,
+          "height": 720,
+          "previewable": true,
+          "pairedT3x": null,
+          "nodeCount": 0,
+          "hasProvenance": false
+        }
+      },
+      {
+        "id": "RES-0639",
+        "ontologyTypeId": "ONT-301",
+        "roleTypeIds": [
+          "ONT-306"
+        ],
+        "entityKind": "resource",
+        "label": "camp-workbench-sheet-furniture.png",
+        "source": "filesystem-scan",
+        "attributes": {
+          "path": "docs/promo/camp-workbench/camp-workbench-sheet-furniture.png",
+          "kind": "image",
+          "category": "source/promo",
+          "status": "source",
+          "bytes": 246555,
+          "createdAt": "2026-09-12T08:22:04.039062+00:00",
+          "width": 1280,
+          "height": 720,
+          "previewable": true,
+          "pairedT3x": null,
+          "nodeCount": 0,
+          "hasProvenance": false
+        }
+      },
+      {
+        "id": "RES-0640",
+        "ontologyTypeId": "ONT-301",
+        "roleTypeIds": [
+          "ONT-306"
+        ],
+        "entityKind": "resource",
+        "label": "camp-workbench-sheet-props.png",
+        "source": "filesystem-scan",
+        "attributes": {
+          "path": "docs/promo/camp-workbench/camp-workbench-sheet-props.png",
+          "kind": "image",
+          "category": "source/promo",
+          "status": "source",
+          "bytes": 249966,
+          "createdAt": "2026-09-12T08:22:04.040462+00:00",
+          "width": 1280,
+          "height": 720,
+          "previewable": true,
+          "pairedT3x": null,
+          "nodeCount": 0,
+          "hasProvenance": false
+        }
+      },
+      {
+        "id": "RES-0641",
+        "ontologyTypeId": "ONT-301",
+        "roleTypeIds": [
+          "ONT-306"
+        ],
+        "entityKind": "resource",
+        "label": "camp-workbench-visual-bible.png",
+        "source": "filesystem-scan",
+        "attributes": {
+          "path": "docs/promo/camp-workbench/camp-workbench-visual-bible.png",
+          "kind": "image",
+          "category": "source/promo",
+          "status": "source",
+          "bytes": 190027,
+          "createdAt": "2026-09-12T08:22:04.042796+00:00",
+          "width": 1280,
+          "height": 720,
           "previewable": true,
           "pairedT3x": null,
           "nodeCount": 0,
@@ -118239,7 +118427,7 @@
       }
     ],
     "meta": {
-      "entityCount": 1785,
+      "entityCount": 1789,
       "relationCount": 2894,
       "droppedRelationCount": 0
     }
@@ -118249,7 +118437,7 @@
       "schemaVersion": 1,
       "extractorVersion": 1,
       "parser": "luaparse",
-      "generatedAt": "2026-09-02T00:34:18.838Z",
+      "generatedAt": "2026-09-12T08:25:34.633Z",
       "fileCount": 36,
       "propagationRounds": 8
     },

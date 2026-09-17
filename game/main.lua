@@ -79,7 +79,8 @@ function love.update(dt)
     R.perfWindow, R.perfFrames, R.perfSlowFrames, R.perfMaxDt = 0, 0, 0, 0
   end
   Audio.ensureConsoleLoaded()
-  if CampPreload.active() and R.scene ~= "play" then CampPreload.runSlice(1) end
+  if CampPreload.active() then CampPreload.runSlice(1) end
+  Flow.pumpDepartArrival()
   R.titlePulse = R.titlePulse + dt
   R.waterPhase = R.waterPhase + dt * 2.2
   Toast.update(dt)

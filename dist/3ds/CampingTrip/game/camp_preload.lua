@@ -23,37 +23,41 @@ function CampPreload.reset(destinationId)
   campReady = false
   loadedDestinationId = destinationId
   state = { active = false, steps = nil, index = 1, startedAt = 0, useStaticBase = false }
-  local a = host and host.Assets.get() or {}
-  for _, key in ipairs({
-    "grass", "water", "shallow", "trees", "bushes", "flowers", "stones", "dirt",
-    "campStaticBase", "coastOceanSunrise", "coastOceanSunset", "forestDistantCanopy",
-    "reed", "log", "stump", "pier", "nest", "shore", "dirtFringe",
-    "fish", "birds", "butterfly", "dragonfly", "firefly", "crab",
-    "tentOpen", "tent", "tentPacked", "firepit", "brewKit", "steam",
-  }) do a[key] = nil end
+  if host and host.Assets and host.Assets.releasePlayTextures then
+    host.Assets.releasePlayTextures()
+  end
   if host and host.CampTiles and host.CampTiles.resetCanvas then host.CampTiles.resetCanvas() end
   if collectgarbage then pcall(collectgarbage, "collect") end
 end
 
 local function makeSteps()
-  local steps = {}
-  local function add(fn) steps[#steps + 1] = fn end
+  local essential, later, steps = {}, {}, {}
+  local function need(fn) essential[#essential + 1] = fn end
+  local function after(fn) later[#later + 1] = fn end
   local load = function(p) return host.Assets.load(p) end
   local assets = function() return host.Assets.get() end
   local AP = host.AP
   local pack = Destinations.current()
+  local console = host.isConsole
 
   if pack.id == "coast" then
-    add(function()
+    need(function()
       local a = assets()
       a.grass, a.water, a.shallow, a.dirt = {}, {}, {}, {}
       a.trees, a.bushes, a.flowers, a.stones = {}, {}, {}, {}
       a.campStaticBase = host.staticPlayFx and load(AP.sceneCamp("coast_static_base.png")) or nil
-      a.coastOceanSunrise = load(AP.sceneCamp("coast_ocean_sunrise.png"))
-      a.coastOceanSunset = load(AP.sceneCamp("coast_ocean_sunset.png"))
       state.useStaticBase = host.staticPlayFx and a.campStaticBase ~= nil
     end)
-    add(function()
+    need(function()
+      -- 营地从清晨开始，日落海面等到黄昏再读，避免出发页一次解三张大图。
+      assets().coastOceanSunrise = load(AP.sceneCamp("coast_ocean_sunrise.png"))
+    end)
+    need(function()
+      local Story = require("scenes.story")
+      local beat = Story.depart.beats[2]
+      if beat and host.Assets.ensureStory then host.Assets.ensureStory(beat.img) end
+    end)
+    need(function()
       if state.useStaticBase then return end
       local a = assets()
       for i = 0, 3 do a.grass[i] = load(AP.sceneCamp("tile_sand" .. i .. ".png")) end
@@ -65,7 +69,7 @@ local function makeSteps()
       a.dirt[0] = load(AP.sceneCamp("tile_wet_sand.png"))
       for i = 1, 3 do a.dirt[i] = a.dirt[0] end
     end)
-    add(function()
+    need(function()
       if state.useStaticBase then return end
       local a = assets()
       a.trees[0] = load(AP.sceneCamp("coast_pine.png"))
@@ -78,48 +82,69 @@ local function makeSteps()
       for i = 1, 2 do a.stones[i] = a.stones[0] end
       a.log = load(AP.sceneCamp("driftwood.png"))
     end)
-    add(function()
+    need(function()
       local a = assets()
       a.shadow = load(AP.shared("prop_shadow.png"))
-      a.shadowSm = load(AP.shared("prop_shadow_sm.png"))
-      a.shadowTree = load(AP.shared("prop_shadow_tree.png"))
-      a.birds = {
-        [0] = { perch = load(AP.sceneWorld("seabird_0.png")), fly = {
-          load(AP.sceneWorld("seabird_0.png")), load(AP.sceneWorld("seabird_1.png"))
-        } }
-      }
-      a.crab = { load(AP.sceneWorld("crab_0.png")), load(AP.sceneWorld("crab_1.png")) }
-      a.fish, a.butterfly, a.firefly = {}, {}, {}
+      if not console then
+        a.shadowSm = load(AP.shared("prop_shadow_sm.png"))
+        a.shadowTree = load(AP.shared("prop_shadow_tree.png"))
+      end
     end)
-    add(function()
+    if console then
+      after(function()
+        local a = assets()
+        local bird = load(AP.sceneWorld("seabird_0.png"))
+        a.birds = { [0] = { perch = bird, fly = { bird, load(AP.sceneWorld("seabird_1.png")) } } }
+        a.crab = { load(AP.sceneWorld("crab_0.png")), load(AP.sceneWorld("crab_1.png")) }
+        a.fish, a.butterfly, a.firefly = {}, {}, {}
+      end)
+    else
+      need(function()
+        local a = assets()
+        a.birds = {
+          [0] = { perch = load(AP.sceneWorld("seabird_0.png")), fly = {
+            load(AP.sceneWorld("seabird_0.png")), load(AP.sceneWorld("seabird_1.png"))
+          } }
+        }
+        a.fish, a.butterfly, a.firefly = {}, {}, {}
+      end)
+      need(function()
+        assets().crab = { load(AP.sceneWorld("crab_0.png")), load(AP.sceneWorld("crab_1.png")) }
+      end)
+    end
+    need(function()
       local a = assets()
-      a.tentOpen = load(AP.forestCamp("tent_open_hd.png"))
-      a.tent, a.tentPacked = a.tentOpen, load(AP.forestCamp("tile_tent_packed.png"))
+      a.tentPacked = load(AP.forestCamp("tile_tent_packed.png"))
       a.firepit = load(AP.forestCamp("prop_firepit.png"))
       a.steam = {}
     end)
-    add(function()
-      host.Assets.ensureCast(1)
+    need(function()
+      local player = host.getPlayer and host.getPlayer()
+      local castId = (player and player.castId) or 1
+      host.Assets.ensureCast(castId)
+      host.Assets.ensureWalk(castId)
       local a = assets()
-      a.player = a.cast[1] or load(AP.shared("player.png"))
-      for _, g in ipairs(host.gear) do g.icon = load(AP.gearPath(g.id == "cup" and "cup" or g.id)) end
-      a.cupIcons = {}
-      for _, st in ipairs(AP.CUP_STYLES) do a.cupIcons[#a.cupIcons + 1] = load(AP.cupPath(st.file)) end
-      a.fruitIcon = load(AP.forestWorld("fruit_icon.png"))
-      a.fishIcons = {
-        ayu = load(AP.forestWorld("fish_icon_ayu.png")),
-        trout = load(AP.forestWorld("fish_icon_trout.png")),
-        carp = load(AP.forestWorld("fish_icon_carp.png")),
-      }
+      a.player = a.cast[castId] or load(AP.shared("player.png"))
     end)
-    add(function()
+    need(function()
+      for i = 1, 3 do
+        local g = host.gear[i]
+        if g then g.icon = load(AP.gearPath(g.id == "cup" and "cup" or g.id)) end
+      end
+    end)
+    need(function()
+      for i = 4, #host.gear do
+        local g = host.gear[i]
+        if g then g.icon = load(AP.gearPath(g.id == "cup" and "cup" or g.id)) end
+      end
+    end)
+    need(function()
       if collectgarbage then pcall(collectgarbage, "collect") end
       if host.buildCampGroundCanvas then host.buildCampGroundCanvas() end
     end)
-    return steps
-  end
+  else
 
-  add(function()
+  need(function()
     local a = assets()
     a.grass, a.water, a.shallow, a.trees = {}, {}, {}, {}
     a.bushes, a.flowers, a.stones, a.dirt = {}, {}, {}, {}
@@ -128,22 +153,22 @@ local function makeSteps()
     a.forestDistantCanopy = state.useStaticBase and nil
       or load(AP.forestCamp("forest_distant_canopy.png"))
   end)
-  add(function()
+  need(function()
     if state.useStaticBase then return end
     local a = assets()
     for i = 0, 3 do a.grass[i] = load(AP.forestCamp("tile_grass" .. i .. ".png")) end
   end)
-  add(function()
+  need(function()
     if state.useStaticBase then return end
     local a = assets()
     for i = 4, 7 do a.grass[i] = load(AP.forestCamp("tile_grass" .. i .. ".png")) end
   end)
-  add(function()
+  need(function()
     if state.useStaticBase then return end
     local a = assets()
     for i = 0, 3 do a.dirt[i] = load(AP.forestCamp("tile_dirt" .. i .. ".png")) end
   end)
-  add(function()
+  need(function()
     if state.useStaticBase then
       local a = assets()
       a.water, a.shallow = {}, {}
@@ -153,33 +178,33 @@ local function makeSteps()
     for i = 0, 3 do a.water[i] = load(AP.forestCamp("tile_water" .. i .. ".png")) end
     for i = 0, 3 do a.shallow[i] = load(AP.forestCamp("tile_shallow" .. i .. ".png")) end
   end)
-  add(function()
+  need(function()
     if state.useStaticBase then return end
     local a = assets()
     for i = 0, 3 do a.trees[i] = load(AP.shared("tile_tree" .. i .. ".png")) end
   end)
-  add(function()
+  need(function()
     if state.useStaticBase then return end
     local a = assets()
     for i = 4, 7 do a.trees[i] = load(AP.shared("tile_tree" .. i .. ".png")) end
   end)
-  add(function()
+  need(function()
     if state.useStaticBase then return end
     local a = assets()
     for i = 8, 11 do a.trees[i] = load(AP.shared("tile_tree" .. i .. ".png")) end
   end)
-  add(function()
+  need(function()
     if state.useStaticBase then return end
     local a = assets()
     for i = 0, 2 do a.bushes[i] = load(AP.shared("tile_bush" .. i .. ".png")) end
     for i = 0, 3 do a.flowers[i] = load(AP.shared("prop_flower" .. i .. ".png")) end
   end)
-  add(function()
+  need(function()
     if state.useStaticBase then return end
     local a = assets()
     for i = 0, 2 do a.stones[i] = load(AP.shared("tile_stone" .. i .. ".png")) end
   end)
-  add(function()
+  need(function()
     if state.useStaticBase then return end
     local a = assets()
     a.reed = load(AP.forestCamp("prop_reed.png"))
@@ -187,43 +212,87 @@ local function makeSteps()
     a.stump = load(AP.shared("prop_stump.png"))
     a.pier = load(AP.forestCamp("prop_pier.png"))
   end)
-  add(function()
+  need(function()
     local a = assets()
     a.shadow = load(AP.shared("prop_shadow.png"))
-    a.shadowSm = load(AP.shared("prop_shadow_sm.png"))
-    a.shadowTree = load(AP.shared("prop_shadow_tree.png"))
-  end)
-  add(function()
-    local a = assets()
-    if not host.critterFx then
-      a.fish, a.birds, a.butterfly, a.firefly = {}, {}, {}, {}
-      return
+    if not console then
+      a.shadowSm = load(AP.shared("prop_shadow_sm.png"))
+      a.shadowTree = load(AP.shared("prop_shadow_tree.png"))
     end
-    a.fish = {}
-    for i = 0, 4 do a.fish[i] = load(AP.forestWorld("fish_" .. i .. ".png")) end
   end)
-  add(function()
-    if not host.critterFx then return end
-    local a = assets()
-    a.birds = {}
-    for i = 0, 2 do
-      a.birds[i] = {
-        perch = load(AP.forestWorld("bird_" .. i .. "_perch.png")),
-        fly = {
-          load(AP.forestWorld("bird_" .. i .. "_fly0.png")),
-          load(AP.forestWorld("bird_" .. i .. "_fly1.png"))
+  if console then
+    after(function()
+      if not host.critterFx then
+        local a = assets()
+        a.fish, a.birds, a.butterfly, a.firefly = {}, {}, {}, {}
+        return
+      end
+      local a = assets()
+      local perch = load(AP.forestWorld("bird_0_perch.png"))
+      a.fish = { [0] = load(AP.forestWorld("fish_0.png")) }
+      a.birds = { [0] = { perch = perch, fly = { perch, load(AP.forestWorld("bird_0_fly0.png")) } } }
+      a.butterfly, a.firefly = {}, {}
+    end)
+    after(function()
+      if not host.critterFx then return end
+      local a = assets()
+      a.fish = a.fish or {}
+      for i = 1, 4 do a.fish[i] = load(AP.forestWorld("fish_" .. i .. ".png")) end
+    end)
+    after(function()
+      if not host.critterFx then return end
+      local a = assets()
+      a.birds = a.birds or {}
+      for i = 1, 2 do
+        a.birds[i] = {
+          perch = load(AP.forestWorld("bird_" .. i .. "_perch.png")),
+          fly = {
+            load(AP.forestWorld("bird_" .. i .. "_fly0.png")),
+            load(AP.forestWorld("bird_" .. i .. "_fly1.png"))
+          }
         }
-      }
-    end
-  end)
-  add(function()
-    if not host.critterFx then return end
-    local a = assets()
-    a.butterfly = { load(AP.forestWorld("butterfly_0.png")), load(AP.forestWorld("butterfly_1.png")) }
-    a.dragonfly = load(AP.forestWorld("dragonfly.png"))
-    a.firefly = { load(AP.forestWorld("firefly_0.png")), load(AP.forestWorld("firefly_1.png")) }
-  end)
-  add(function()
+      end
+    end)
+    after(function()
+      if not host.critterFx then return end
+      local a = assets()
+      a.butterfly = { load(AP.forestWorld("butterfly_0.png")), load(AP.forestWorld("butterfly_1.png")) }
+      a.dragonfly = load(AP.forestWorld("dragonfly.png"))
+      a.firefly = { load(AP.forestWorld("firefly_0.png")), load(AP.forestWorld("firefly_1.png")) }
+    end)
+  else
+    need(function()
+      local a = assets()
+      if not host.critterFx then
+        a.fish, a.birds, a.butterfly, a.firefly = {}, {}, {}, {}
+        return
+      end
+      a.fish = {}
+      for i = 0, 4 do a.fish[i] = load(AP.forestWorld("fish_" .. i .. ".png")) end
+    end)
+    need(function()
+      if not host.critterFx then return end
+      local a = assets()
+      a.birds = {}
+      for i = 0, 2 do
+        a.birds[i] = {
+          perch = load(AP.forestWorld("bird_" .. i .. "_perch.png")),
+          fly = {
+            load(AP.forestWorld("bird_" .. i .. "_fly0.png")),
+            load(AP.forestWorld("bird_" .. i .. "_fly1.png"))
+          }
+        }
+      end
+    end)
+    need(function()
+      if not host.critterFx then return end
+      local a = assets()
+      a.butterfly = { load(AP.forestWorld("butterfly_0.png")), load(AP.forestWorld("butterfly_1.png")) }
+      a.dragonfly = load(AP.forestWorld("dragonfly.png"))
+      a.firefly = { load(AP.forestWorld("firefly_0.png")), load(AP.forestWorld("firefly_1.png")) }
+    end)
+  end
+  need(function()
     local a = assets()
     if state.useStaticBase then
       a.nest, a.shore, a.dirtFringe = nil, nil, nil
@@ -243,15 +312,12 @@ local function makeSteps()
       W = load(AP.forestCamp("dirt_fringe_W.png"))
     }
   end)
-  add(function()
+  need(function()
     local a = assets()
-    -- 地图使用独立 96×72 高清 CKE 资源；gear/tent.png 只供背包目录。
-    a.tentOpen = load(AP.forestCamp("tent_open_hd.png"))
-    a.tent = a.tentOpen
     a.tentPacked = load(AP.forestCamp("tile_tent_packed.png"))
     a.firepit = load(AP.forestCamp("prop_firepit.png"))
   end)
-  add(function()
+  need(function()
     local a = assets()
     if host.staticPlayFx then
       a.steam = {}
@@ -264,38 +330,40 @@ local function makeSteps()
       }
     end
   end)
-  add(function()
-    host.Assets.ensureCast(1)
-    local a = assets()
-    a.player = a.cast[1] or load(AP.shared("player.png"))
+  need(function()
+    local Story = require("scenes.story")
+    local beat = Story.depart.beats[2]
+    if beat then host.Assets.ensureStory(beat.img) end
   end)
-  add(function()
+  need(function()
+    local player = host.getPlayer and host.getPlayer()
+    local castId = (player and player.castId) or 1
+    host.Assets.ensureCast(castId)
+    host.Assets.ensureWalk(castId)
     local a = assets()
-    for _, g in ipairs(host.gear) do
-      g.icon = load(AP.gearPath(g.id == "cup" and "cup" or g.id))
-    end
-    a.cupIcons = {}
-    for _, st in ipairs(AP.CUP_STYLES) do
-      a.cupIcons[#a.cupIcons + 1] = load(AP.cupPath(st.file))
-    end
-    if a.cupIcons[1] then
-      local cupStyle = host.getCupStyle and host.getCupStyle() or 1
-      for _, g in ipairs(host.gear) do
-        if g.id == "cup" then g.icon = a.cupIcons[cupStyle] or g.icon end
-      end
-    end
-    a.fruitIcon = load(AP.forestWorld("fruit_icon.png"))
-    a.fishIcons = {
-      ayu = load(AP.forestWorld("fish_icon_ayu.png")),
-      trout = load(AP.forestWorld("fish_icon_trout.png")),
-      carp = load(AP.forestWorld("fish_icon_carp.png"))
-    }
+    a.player = a.cast[castId] or load(AP.shared("player.png"))
   end)
-  add(function()
+  need(function()
+    for i = 1, 3 do
+      local g = host.gear[i]
+      if g then g.icon = load(AP.gearPath(g.id == "cup" and "cup" or g.id)) end
+    end
+  end)
+  need(function()
+    for i = 4, #host.gear do
+      local g = host.gear[i]
+      if g then g.icon = load(AP.gearPath(g.id == "cup" and "cup" or g.id)) end
+    end
+  end)
+  need(function()
     if collectgarbage then pcall(collectgarbage, "collect") end
     if host.buildCampGroundCanvas then host.buildCampGroundCanvas() end
   end)
+  end
 
+  state.essentialUntil = #essential
+  for i = 1, #essential do steps[i] = essential[i] end
+  for i = 1, #later do steps[#steps + 1] = later[i] end
   return steps
 end
 
@@ -308,13 +376,21 @@ function CampPreload.begin(reason)
   state.useStaticBase = false
   state.steps = makeSteps()
   if host and host.appendLoadLog then
-    host.appendLoadLog("camp_preload_begin reason=" .. tostring(reason or "unknown") .. " mode=" .. tostring(host.perfMode))
+    host.appendLoadLog(string.format(
+      "camp_preload_begin reason=%s mode=%s essential=%d later=%d",
+      tostring(reason or "unknown"),
+      tostring(host.perfMode),
+      state.essentialUntil or 0,
+      #(state.steps or {}) - (state.essentialUntil or 0)
+    ))
   end
 end
 
 function CampPreload.runSlice(maxSteps)
-  if campReady then return true end
-  CampPreload.begin("forced")
+  if not state.active then
+    if campReady then return true end
+    CampPreload.begin("forced")
+  end
   maxSteps = maxSteps or 1
   for _ = 1, maxSteps do
     local step = state.steps and state.steps[state.index]
@@ -323,12 +399,13 @@ function CampPreload.runSlice(maxSteps)
       state.active = false
       if host and host.appendLoadLog then
         host.appendLoadLog(string.format(
-          "ensureCamp done fails=%d durationMs=%.1f mode=%s staticBase=%s steps=%d",
+          "ensureCamp done fails=%d durationMs=%.1f mode=%s staticBase=%s steps=%d essential=%d",
           host.Assets.failCount(),
           (love.timer.getTime() - state.startedAt) * 1000,
           tostring(host.perfMode),
           tostring(state.useStaticBase),
-          state.index - 1
+          state.index - 1,
+          state.essentialUntil or 0
         ))
       end
       return true
@@ -348,6 +425,18 @@ function CampPreload.runSlice(maxSteps)
       host.appendLoadLog("camp_preload_step_fail index=" .. state.index .. " err=" .. tostring(err))
     end
     state.index = state.index + 1
+    if not campReady and state.essentialUntil and state.index > state.essentialUntil then
+      campReady = true
+      if host and host.appendLoadLog then
+        host.appendLoadLog(string.format(
+          "camp_preload_essential durationMs=%.1f steps=%d later=%d mode=%s",
+          (love.timer.getTime() - state.startedAt) * 1000,
+          state.essentialUntil,
+          #(state.steps or {}) - state.essentialUntil,
+          tostring(host.perfMode)
+        ))
+      end
+    end
   end
   return false
 end

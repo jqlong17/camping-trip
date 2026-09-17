@@ -73,6 +73,9 @@ function GearPlay.bindHost(h)
     getTentOpen = H.getTentOpen,
     getTentStyle = H.getTentStyle,
     setTentStyle = H.setTentStyle,
+    ensureTentOpen = function()
+      if Assets and Assets.ensureTentOpen then Assets.ensureTentOpen() end
+    end,
     pitchTent = function()
       return GearPlay.setTentMap(true)
     end,
@@ -228,6 +231,53 @@ function GearPlay.cancelRitual()
   H.setBrewActive(false)
   local label = (r.kind == "tea" and "泡茶") or (r.kind == "rod" and "钓鱼") or "手冲"
   H.say("取消了" .. label, 2)
+end
+
+function GearPlay.ritualChoiceCount()
+  local r = H.getRitual()
+  if not r then return 0 end
+  if r.kind == "drip" then return DripBrew.pickCount(r) end
+  if r.kind == "tea" then return TeaBrew.pickCount(r) end
+  if r.kind == "rod" then return FishRod.pickCount(r) end
+  if r.kind == "cup_sip" then
+    local phase = CupSip.phaseById(r.phase)
+    if not phase or phase.kind ~= "choice" then return 0 end
+    local list = CupSip.catalogFor(phase)
+    return list and #list or 0
+  end
+  if r.kind == "cook" then
+    local phase = CookMeal.phaseById(r.phase)
+    if not phase or phase.kind ~= "choice" then return 0 end
+    local list = CookMeal.catalogFor(phase)
+    return list and #list or 0
+  end
+  return 0
+end
+
+function GearPlay.touchRitual(lx, ly)
+  if lx >= 100 and lx <= 220 and ly >= 210 and ly <= 232 then
+    GearPlay.advanceRitual()
+    return true
+  end
+  if lx >= 230 and lx <= 300 and ly >= 210 and ly <= 232 then
+    GearPlay.cancelRitual()
+    return true
+  end
+  local n = GearPlay.ritualChoiceCount()
+  if n > 0 and ly >= 48 and ly <= 144 and lx >= 10 then
+    local r = H.getRitual()
+    local slotW = math.floor((320 - 20) / n)
+    local i = math.floor((lx - 10) / slotW) + 1
+    if i >= 1 and i <= n then
+      if r.pick == i then
+        GearPlay.advanceRitual()
+      else
+        r.pick = i
+        H.playSfx("ui_move")
+      end
+    end
+  end
+  return true
 end
 
 function GearPlay.tryUseGear()

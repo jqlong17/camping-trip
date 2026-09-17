@@ -75,7 +75,7 @@ end
 function C.start(kind, ctx)
   local h = H()
   ctx = ctx or {}
-  h.ensureRitual()
+  h.ensureRitual("cup")
   h.setRitual({
     kind = "cup_sip",
     drinkKind = kind,
@@ -221,8 +221,8 @@ function C.drawBottom(ritual, assets, context)
     for i, item in ipairs(list or {}) do
       local x = 10 + (i - 1) * slot
       local on = i == ritual.pick
-      love.graphics.setColor(on and 0.95 or 0.2, on and 0.9 or 0.2, on and 0.7 or 0.2, on and 0.35 or 0.15)
-      love.graphics.rectangle("fill", x, 70, slot - 6, 78, 4, 4)
+      love.graphics.setColor(on and 0.98 or 0.94, on and 0.88 or 0.9, on and 0.55 or 0.82)
+      love.graphics.rectangle("fill", x, 70, slot - 6, 78)
       love.graphics.setColor(1, 1, 1, 1)
       local icon = bag and bag[item.id]
       if icon then

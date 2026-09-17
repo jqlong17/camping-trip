@@ -6,7 +6,7 @@ local Runtime = {
   BOT_W = 320,
   BOT_H = 240,
   TILE = 16,
-  buildId = "2026-09-02-destination-pack-coast",
+  buildId = "2026-09-13-preload-lite",
 }
 
 Runtime.isConsole = love.system.getOS() == "Horizon" or love.system.getOS() == "3DS"

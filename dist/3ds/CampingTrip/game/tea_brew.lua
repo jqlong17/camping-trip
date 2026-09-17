@@ -217,7 +217,7 @@ function T.start()
     h.drinkTea()
     return
   end
-  h.ensureRitual()
+  h.ensureRitual("tea")
   if ready and cups >= T.CUPS_PER_POT then
     h.setPot(false, 0)
     T.taste = nil
@@ -260,36 +260,48 @@ function T.advance()
 end
 
 function T.loadChoiceAssets(bucket, loadImage)
+  bucket._loadImage = loadImage
+end
+
+function T.ensurePhaseAssets(bucket, phase)
+  if not bucket or not bucket._loadImage then return end
+  local load = bucket._loadImage
   local base = "assets/ritual/tea/"
-  bucket.leaves, bucket.amounts, bucket.wares, bucket.temps = {}, {}, {}, {}
-  bucket.previewLeaves, bucket.previewAmounts, bucket.previewWares, bucket.previewTemps = {}, {}, {}, {}
-  bucket.teaFrames = {}
-  bucket.rinse = loadImage(base .. "tea_rinse.png")
-  bucket.previewRinse = loadImage(base .. "preview_rinse.png")
-  for _, L in ipairs(T.leaves) do
-    bucket.leaves[L.id] = loadImage(base .. "leaf_" .. L.id .. ".png")
-    bucket.previewLeaves[L.id] = loadImage(base .. "preview_leaf_" .. L.id .. ".png")
+  if (not phase or phase.id == "rinse") and not bucket.rinse then
+    bucket.rinse = load(base .. "tea_rinse.png")
   end
-  for _, a in ipairs(T.amounts) do
-    bucket.amounts[a.id] = loadImage(base .. "tea_amount_" .. a.id .. ".png")
-    bucket.previewAmounts[a.id] = loadImage(base .. "preview_amount_" .. a.id .. ".png")
+  if phase and phase.kind == "brew" and not (bucket.teaFrames and bucket.teaFrames[1]) then
+    bucket.teaFrames = {}
+    for i = 1, 3 do
+      bucket.teaFrames[i] = load(base .. "tea_" .. i .. ".png")
+    end
   end
-  for _, w in ipairs(T.wares) do
-    bucket.wares[w.id] = loadImage(base .. "ware_" .. w.id .. ".png")
-    bucket.previewWares[w.id] = loadImage(base .. "preview_ware_" .. w.id .. ".png")
-  end
-  for _, t in ipairs(T.temps) do
-    bucket.temps[tostring(t.c)] = loadImage(base .. "tea_temp_" .. t.c .. ".png")
-    bucket.previewTemps[tostring(t.c)] = loadImage(base .. "preview_temp_" .. t.c .. ".png")
-  end
-  for i = 1, 3 do
-    bucket.teaFrames[i] = loadImage(base .. "tea_" .. i .. ".png")
+  if phase and phase.assetBag == "leaves" and not bucket.leaves then
+    bucket.leaves = {}
+    for _, leaf in ipairs(T.leaves) do
+      bucket.leaves[leaf.id] = load(base .. "leaf_" .. leaf.id .. ".png")
+    end
+  elseif phase and phase.assetBag == "amounts" and not bucket.amounts then
+    bucket.amounts = {}
+    for _, amount in ipairs(T.amounts) do
+      bucket.amounts[amount.id] = load(base .. "tea_amount_" .. amount.id .. ".png")
+    end
+  elseif phase and phase.assetBag == "wares" and not bucket.wares then
+    bucket.wares = {}
+    for _, ware in ipairs(T.wares) do
+      bucket.wares[ware.id] = load(base .. "ware_" .. ware.id .. ".png")
+    end
+  elseif phase and phase.assetBag == "temps" and not bucket.temps then
+    bucket.temps = {}
+    for _, temp in ipairs(T.temps) do
+      bucket.temps[tostring(temp.c)] = load(base .. "tea_temp_" .. temp.c .. ".png")
+    end
   end
 end
 
 function T.topView(ritual, assets)
   local phase = T.phaseById(ritual.phase or "brew")
-  local title, img, mode = "泡茶", nil, "icon"
+  local title, img, mode, previewPath = "泡茶", nil, "icon", nil
   if not phase then return title, nil, mode end
   if phase.kind == "brew" then
     local labels = { "泡茶 · 注水", "泡茶 · 闷泡", "泡茶 · 出汤" }
@@ -298,22 +310,32 @@ function T.topView(ritual, assets)
     mode = "brew"
   elseif phase.kind == "confirm" then
     title = "温杯烫壶"
-    img = assets and assets.previewRinse
-    mode = "preview"
+    img = assets and assets.rinse
+    mode = "catalog"
+    previewPath = "assets/ritual/tea/preview_rinse.png"
   elseif phase.kind == "choice" then
     local list = T.catalogFor(phase)
     local item = list and list[ritual.pick]
     title = phase.head .. " · " .. T.choiceLabel(phase, item)
-    img = T.choicePreview(phase, item, assets)
-    mode = img and "preview" or "catalog"
+    img = T.choiceIcon(phase, item, assets)
+    mode = "catalog"
+    if item then
+      if phase.assetBag == "leaves" then previewPath = "assets/ritual/tea/preview_leaf_" .. item.id .. ".png"
+      elseif phase.assetBag == "amounts" then previewPath = "assets/ritual/tea/preview_amount_" .. item.id .. ".png"
+      elseif phase.assetBag == "wares" then previewPath = "assets/ritual/tea/preview_ware_" .. item.id .. ".png"
+      elseif phase.assetBag == "temps" then previewPath = "assets/ritual/tea/preview_temp_" .. tostring(item.c) .. ".png" end
+    end
   end
-  return title, img, mode
+  return title, img, mode, previewPath
 end
 
 function T.drawTop(ritual, assets, ctx)
+  T.ensurePhaseAssets(assets, T.phaseById(ritual.phase or "leaf"))
   love.graphics.setColor(0, 0, 0, 0.45)
   love.graphics.rectangle("fill", 0, 0, ctx.TOP_W, ctx.TOP_H)
-  local title, img, mode = T.topView(ritual, assets)
+  local title, img, mode, previewPath = T.topView(ritual, assets)
+  local preview = ctx.loadTopPreview and ctx.loadTopPreview(previewPath)
+  if preview then img, mode = preview, mode == "brew" and "brew" or "preview" end
   if img then
     love.graphics.setColor(1, 1, 1, 1)
     local iw, ih = img:getWidth(), img:getHeight()
@@ -375,6 +397,7 @@ end
 function T.drawBottom(ritual, assets, ctx)
   local BOT_W = ctx.BOT_W
   local phase, idx = T.phaseById(ritual.phase or "brew")
+  T.ensurePhaseAssets(assets, phase)
   local head = "泡茶"
   if phase then
     if phase.kind == "brew" then

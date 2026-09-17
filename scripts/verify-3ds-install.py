@@ -136,11 +136,11 @@ def check_lua() -> None:
     else:
         log("FAIL", "playSfx 缺少真机保护")
 
-    amb_3ds = GAME / "audio" / "3ds" / "amb_creek.mp3"
-    if amb_3ds.is_file() and amb_3ds.stat().st_size > 10_000:
-        log("OK", "真机溪水环境音 audio/3ds/amb_creek.mp3")
+    amb_3ds = GAME / "audio" / "3ds" / "amb_creek.wav"
+    if amb_3ds.is_file() and amb_3ds.stat().st_size > 100_000:
+        log("OK", "真机溪水环境音使用静态 PCM WAV，避免 MP3 stream 锁帧")
     else:
-        log("FAIL", "缺少 game/audio/3ds/amb_creek.mp3（DEV-069 近水溪水）")
+        log("FAIL", "缺少 game/audio/3ds/amb_creek.wav（真机安全静态循环）")
 
     ocean_3ds = GAME / "audio" / "3ds" / "amb_ocean_waves.wav"
     if ocean_3ds.is_file() and ocean_3ds.stat().st_size > 100_000:
@@ -180,6 +180,18 @@ def check_lua() -> None:
             log("OK", f"有 {fn}()")
         else:
             log("FAIL", f"缺少 {fn}()")
+
+    rounded = []
+    for path in GAME.rglob("*.lua"):
+        text = path.read_text(encoding="utf-8")
+        if re.search(r'rectangle\s*\(\s*"[^"]+"\s*,[^)]+,\s*\d+\s*,\s*\d+\s*\)', text):
+            for i, line in enumerate(text.splitlines(), 1):
+                if re.search(r'rectangle\s*\(\s*"[^"]+"\s*,.+\d+\s*,\s*\d+\s*\)', line) and line.count(",") >= 6:
+                    rounded.append(f"{path.relative_to(ROOT)}:{i}")
+    if rounded:
+        log("FAIL", "rectangle 带圆角参数，真机下屏会停绘: " + ", ".join(rounded[:6]))
+    else:
+        log("OK", "rectangle 未使用 LovePotion 不支持的圆角参数")
 
     copies_cia_into_hb = [
         ln

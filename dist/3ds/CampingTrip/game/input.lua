@@ -87,11 +87,7 @@ function Input.onBottomTouch(lx, ly)
     end
   elseif R.scene == "play" then
     if R.ritual then
-      if lx >= 100 and lx <= 220 and ly >= 210 and ly <= 232 then Session.tryUseGear()
-      elseif lx >= 230 and lx <= 300 and ly >= 210 and ly <= 232 then
-        GearPlay.cancelRitual()
-        R.brewActive = false
-      end
+      GearPlay.touchRitual(lx, ly)
       return
     end
     local action = playActionHit(lx, ly)
@@ -100,9 +96,8 @@ function Input.onBottomTouch(lx, ly)
     else
       local i = hitGear(lx, ly)
       if i then
-        if R.selected ~= i then Audio.playSfx("ui_move") end
         R.selected = i
-        host.say("选中 · " .. R.gear[i].name)
+        Session.tryUseGear()
       end
     end
   end

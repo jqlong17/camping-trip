@@ -1,106 +1,146 @@
-# 露营之旅
+# 露营之旅 / Camping Trip
 
-Nintendo 3DS 上的**休闲露营小游戏**（爱好向，不上架）。  
-一个夏天上班族周末逃进林间：搭帐篷、手冲咖啡、看河水从早到晚，夜里点起露营灯，第二天收拾行李回家——下一周再来，装备略有不同。
+Nintendo 3DS 上的休闲露营游戏。爱好向，不上架，也和任天堂没有任何官方关系。
 
-对玩家：**露营之旅** / **Camping Trip**。电脑仓库目录仍叫 `linjian`，真机 Homebrew 文件夹和 CIA 文件名用 `CampingTrip`，不再用拼音。
+一个夏天，上班族把周末逃进林间或海边：搭帐篷、手冲咖啡、泡一壶茶、在水边钓鱼，看天色从清晨走到夜里，点起营火，第二天再收拾回家。下一周还可以再来。
 
-## 文档索引
+<p align="center">
+  <img src="game/assets/ui/title_top.png" alt="露营之旅标题画面" width="400">
+</p>
 
-| 文档 | 说明 |
-|------|------|
-| **[docs/游戏设计-SPEC.md](./docs/游戏设计-SPEC.md)** | 完整体验规格 + DEV 日志 |
-| **[docs/动画与交互-SPEC.md](./docs/动画与交互-SPEC.md)** | 四向精灵 / 手冲仪式 / 帐篷开合 |
-| **[docs/怎么玩.md](./docs/怎么玩.md)** | 操作说明 + Agent 自测 `love game --playtest` |
-| **[docs/故事资源图谱-SPEC.md](./docs/故事资源图谱-SPEC.md)** | 可视化故事走向、稳定资源编号与遗漏审计 |
-| **[docs/Lua-AST运行时流程提取-SPEC.md](./docs/Lua-AST运行时流程提取-SPEC.md)** | 从 Lua AST 提取真实场景、状态、跳转并与故事图对账 |
-| **[项目背景.md](./项目背景.md)** | 硬件/CFW、部署踩坑、给后续 Agent 的接续说明 |
-| `.cursor/skills/linjian-camping-3ds/` | 本项目 Agent Skill（约束与工作流） |
-| `game/` | 运行中的源码与资源（`main.lua`、`assets/`、`fonts/`） |
-| `dist/3ds/CampingTrip/` | 可直接拷到 SD 的目录镜像 |
-| **[docs/storyboards/](./docs/storyboards/)** | 序章/出发/回家分镜；进游戏用清晰 400×240 |
-| `vendor/` | LovePotion 3DS 预编译包 |
+**这是一个刚开源的小营地。** 缺一起搭帐篷的人：写代码、画像素、补目的地、在更多真机上试玩，都算共建。如果你也喜欢 3DS 和安静的周末，欢迎直接开 Issue 或 Pull Request，细节见 [CONTRIBUTING.md](./CONTRIBUTING.md)。
 
-> 清掉 Cursor 对话后：先读 **SPEC**，再读 **项目背景**。
+- 玩家名称：**露营之旅** / **Camping Trip**
+- 引擎：[LÖVE Potion](https://github.com/lovebrew/lovepotion) 3.0.2（LÖVE 11）
+- 上屏 400×240，下屏 320×240
+- 许可证：[MIT](./LICENSE)
 
-## Agent 记录准则
+## 安装前请确认
 
-这个项目已经多次遇到“真机现象和桌面结果完全不一致”的问题：PNG/T3X、LovePotion 音频、HOME Menu/CIA、FAT32 脏状态、营地性能都靠日志和文档才避免重复试错。任何 Agent 接手后，不能只在代码里修完就结束，必须把本轮新增事实、假设、验证命令、真机日志结论和后续判断口径写回文档。
+游戏只跑在**已经安装自制固件**的 3DS / 2DS 上，不能装进原装系统。
 
-最低记录要求：
+你需要：
 
-1. 改玩法、性能、部署、真机兼容性后，更新 [docs/游戏设计-SPEC.md](./docs/游戏设计-SPEC.md) 的 DEV 日志。
-2. 真机加载、黑屏、音频、T3X、SD/FAT、CIA/Homebrew 相关经验，更新 [docs/3DS真机开发踩坑与发布准则.md](./docs/3DS真机开发踩坑与发布准则.md)。
-3. 会改变后续 Agent 工作方式的规则，同步更新 `.cursor/skills/linjian-camping-3ds/SKILL.md`。
-4. 每条结论要写清楚证据等级：桌面 playtest、SD 日志、真机现象、公开资料，还是推测。
-5. 部署到 SD 前后写明验证结果；插着卡时必须跑 `python3 scripts/verify-3ds-install.py --require-sd`，通过后再 `diskutil eject`。
+1. 已有 **Luma3DS** + **boot9strap**（或同等 CFW）
+2. 能打开 **Homebrew Launcher**
+3. 若走主画面图标，还需要 **FBI**
+4. 音频需要 `sd:/3ds/dspfirm.cdc`。没有的话，进 Rosalina 菜单选 Dump DSP firmware，或先装一次 DSP1
 
-## 体验摘要
+请从本仓库的 [Releases](https://github.com/jqlong17/camping-trip/releases) 下载，不要把安装包塞进错误目录。
 
-- **标题画面**：进入后的第一屏——上屏风景标题，下屏「开始旅程」等菜单（见 SPEC §2）。  
-- **一局** = 一个周末：抵达 → 白天活动 → 夜里点灯 → 次日回家。  
-- **循环**：下一周末豆子/小目标可略变，偏治愈重复。  
-- **打磨重点**：人物细节、咖啡器具、帐篷与光线，而非战斗数值。
+## 推荐：Homebrew 安装（.3dsx）
 
-## 技术
+这是目前最稳的玩法，也是开发时日常使用的路径。
 
-- [LÖVE Potion 3.0.2](https://github.com/lovebrew/lovepotion)（LÖVE 系自制框架）
-- 上屏 400×240：俯视像素林子 / 标题背景  
-- 下屏 320×240：菜单或背包装备（触摸）  
-- 真机形态：`.3dsx` + 旁路 `game/`（**不是** FBI 安装的 `.cia`）
+1. 在 [Releases](https://github.com/jqlong17/camping-trip/releases/latest) 下载 `CampingTrip-3dsx.zip`
+2. 解压后，整份文件夹拷到 SD 卡：
 
-## 电脑预览
-
-```bash
-brew install --cask love   # 若未安装
-cd /Users/ruska/projects/3ds/linjian
-love game
-```
-
-上下屏叠成 400×480。WASD / 方向键走路，点下屏背包。若 macOS 无法验证 love：系统设置 → 隐私与安全性 → 仍要打开。
-
-中文：桌面用 `game/fonts/zh-ui.ttf`；真机用系统 `chinese` 字体。
-`python3 scripts/build-3ds-textures.py` 会自动扫描玩家文案、更新字体子集并验证缺字；
-也可用 `python3 scripts/build-font-subset.py --check` 单独检查。
-
-## 故事资源图谱
-
-```bash
-cd tools/story-atlas
-npm install
-npm run dev
-```
-
-本地页面可沿主线查看全部分镜，用 `SCN/BEAT/ACT/PAGE/RES` 编号搜索对象，
-对照运行时图与制作源，并在 Finder 中定位仓库内文件。`npm run scan` 会先解析
-`game/**/*.lua` 的 AST，审计代码真实跳转与人工故事图之间的差异。
-
-## 真机（SD 卡）
-
-**一键部署（仅同步安全的 3DSX + game/）：**
-
-```bash
-cd /Users/ruska/projects/3ds/linjian
-./scripts/deploy-to-sd.sh
-```
-
-会刷新 `3dsx + game/`，自动生成营地静态底图和 3DS 所需 T3X 纹理，并同步到 SD 的 `3ds/CampingTrip/`。默认不打包、不复制 CIA。
-
-- 日常测试：Homebrew 里选 **CampingTrip**。
-- 预检：`python3 scripts/verify-3ds-install.py --require-sd` 必须 `RESULT PASS`。
-- CIA：本项目日常停用；不要通过 FBI 安装 `CampingTrip.cia`，除非明确重新做单变量实验。
-
-旁路目录：
-
-```
-sdmc:/3ds/CampingTrip/
+```text
+sd:/3ds/CampingTrip/
   CampingTrip.3dsx
   game/
 ```
 
-1. 电脑同步完成后必须 `diskutil eject "/Volumes/NO NAME"`，再拔卡。
-2. 详见 [项目背景.md](./项目背景.md)（Luma 需较新；需 `dspfirm.cdc`）。
+3. **不要**把 `CampingTrip.cia` 放进这个文件夹。CIA 和大于 8MB 的安装包会让 Homebrew 菜单扫目录时崩掉，第二次再进就可能 data abort。
+4. 安全弹出 SD，插回关机状态的 3DS，开机。
+5. 打开 Homebrew Launcher，选择 **CampingTrip**。
 
-## 风格
+如果主画面没有 Homebrew 图标：先真正打开「下载通信 / ダウンロードプレイ」，按 `L + ↓ + Select` 打开 Rosalina → Miscellaneous → **Switch the hb. title**，再重新打开下载通信。
 
-2.5D 俯视像素（借鉴三角力量透视感）；角色是夏天上班族露营装，不是林克。氛围参考 `docs/mockups/`。
+## 也可以：FBI 安装 CIA（主画面图标）
+
+想在主画面看到 **Camping Trip** 图标时，用这个。
+
+LovePotion **官方不保证 CIA**。这个安装包是爱好向自打的，Title ID 为 `000400000F4C4A00`，按 Old 3DS 兼容设置打包，New 3DS 也可以装。大多数机器可以正常进游戏；如果装完主画面异常，按文末的卸载步骤处理。
+
+1. 在 [Releases](https://github.com/jqlong17/camping-trip/releases/latest) 下载 `CampingTrip.cia`
+2. 拷到 SD 卡的 **`cias/`**（或你习惯给 FBI 用的目录），例如：
+
+```text
+sd:/cias/CampingTrip.cia
+```
+
+3. 再次确认：它**不在** `sd:/3ds/CampingTrip/` 里面。
+4. 安全弹出 SD，插卡开机，打开 **FBI**。
+5. 进入 SD → `cias` → `CampingTrip.cia` → **Install CIA**。
+6. 装完后**完全关机再开机**。主画面缓存有时不会立刻刷新，只按 Home 键往往看不到新图标。
+7. 主画面里点 **Camping Trip**。
+
+若你以前装过旧实验包 `00040000004C4A00`，先在系统设置或 GodMode9 里卸掉旧 Title，再装这一份。
+
+### 装 CIA 后主画面黑屏怎么办
+
+先不要重装系统。用 GodMode9（开机按住 START）：
+
+1. HOME → Title manager
+2. `[A:] SYSNAND SD`
+3. 找到 Title `000400000F4C4A00`（或旧的 `00040000004C4A00`）
+4. Manage title → Uninstall title
+5. 再完全关机开机
+
+日常开发、热更新请继续用上面的 `.3dsx` 路径。
+
+## 怎么玩
+
+```text
+标题 → 序章 → 选角色（仅首次）→ 选目的地 → 出发 → 营地 → 回家写日记 → 标题
+```
+
+营地里：
+
+| 操作 | 作用 |
+|------|------|
+| 方向键 | 四向走动 |
+| 下屏点装备 | 直接使用 |
+| 平地上按 A | 展开 / 收起帐篷 |
+| 手冲 / 泡茶 / 做饭 / 钓竿 | 完整仪式，不是一句提示 |
+| 入夜后走到篝火旁按 A | 点灯 |
+| Y | 点过灯后收拾回家 |
+
+更完整的操作表在 [docs/怎么玩.md](./docs/怎么玩.md)。
+
+## 电脑上预览（给一起开发的人）
+
+```bash
+brew install --cask love   # 若未安装 LÖVE 11
+git clone https://github.com/jqlong17/camping-trip.git
+cd camping-trip
+love game
+```
+
+上下屏会叠成 400×480。WASD / 方向键走路，鼠标点下屏背包。
+
+```bash
+love game --playtest
+LINJIAN_PLAYTEST_DESTINATION=forest love game --playtest
+```
+
+## 欢迎一起来开发
+
+露营之旅还很小。林间和海边只是两个周末，手冲、泡茶、做饭、钓鱼也还可以更丰盛。我们希望它慢慢变成一个**大家一起养的营地**，而不是一个人关起门来做完。
+
+特别缺这样的帮助：
+
+- 新目的地、新道具、新的周末小事
+- 16-bit 像素角色、分镜、道具
+- 文案、日记句子、翻译
+- 更多 3DS / 2DS 真机上的安装和帧率反馈
+- 把文档写得对新人更友好
+
+请读 [CONTRIBUTING.md](./CONTRIBUTING.md) 后直接开 Issue 或 PR。想法不成熟也可以先开讨论。哪怕只是来玩一周末、留下一句「这顶帐篷我想换个颜色」，都有用。
+
+## 文档
+
+| 文档 | 说明 |
+|------|------|
+| [CONTRIBUTING.md](./CONTRIBUTING.md) | 怎么参与 |
+| [docs/怎么玩.md](./docs/怎么玩.md) | 操作与自测 |
+| [docs/游戏设计-SPEC.md](./docs/游戏设计-SPEC.md) | 体验规格和 DEV 日志 |
+| [docs/动画与交互-SPEC.md](./docs/动画与交互-SPEC.md) | 四向精灵和仪式 |
+| [docs/3DS真机开发踩坑与发布准则.md](./docs/3DS真机开发踩坑与发布准则.md) | 真机坑和发布边界 |
+
+## 声明
+
+- 这是爱好向自制游戏，**不是**任天堂官方软件，也没有上架 Nintendo eShop。
+- 安装自制固件、FBI、CIA 都有风险，请在自己的机器上自行判断。
+- LovePotion 官方支持的是 `.3dsx`；本仓库提供的 CIA 是社区打包，方便主画面启动，不保证每一台机器都和 Homebrew 路径一样稳。

@@ -15,6 +15,9 @@ function CampTiles.getCanvas()
 end
 
 function CampTiles.resetCanvas()
+  if campGroundCanvas and campGroundCanvas.release then
+    pcall(function() campGroundCanvas:release() end)
+  end
   campGroundCanvas = nil
   campGroundCanvasTried = false
 end
@@ -134,7 +137,7 @@ function CampTiles.drawDropShadow(px, py, kind)
   local TILE = host.TILE
   local img, ox, oy = assets.shadow, 4, 2
   if kind == "sm" then
-    img, ox, oy = assets.shadowSm, 3, 2
+    img, ox, oy = assets.shadowSm or assets.shadow, 3, 2
   elseif kind == "tree" then
     img, ox, oy = assets.shadowTree or assets.shadow, 5, 3
   end
@@ -192,6 +195,9 @@ function CampTiles.drawProp(t, px, py, tx, ty)
     end
   elseif t == 5 then
     local tentOpen = host.getTentOpen and host.getTentOpen()
+    if tentOpen and host.Assets and host.Assets.ensureTentOpen then
+      host.Assets.ensureTentOpen()
+    end
     local img = tentOpen and (assets.tentOpen or assets.tent) or assets.tentPacked
     if img then
       love.graphics.setColor(1, 1, 1, 1)

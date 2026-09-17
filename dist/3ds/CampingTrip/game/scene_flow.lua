@@ -88,6 +88,7 @@ end
 
 function Flow.goTitle()
   R.quitConfirm = false
+  R.departPendingPlay = false
   R.scene = "title"
   Story.reset()
   State.cast.i = 1
@@ -154,9 +155,20 @@ function Flow.goDepart()
   Toast.clear()
 end
 
+function Flow.pumpDepartArrival()
+  if not R.departPendingPlay or not CampPreload.ready() then return end
+  if R.scene ~= "title" and R.scene ~= "depart" then return end
+  Flow.goPlay()
+end
+
 function Flow.goPlay()
+  if not CampPreload.ready() then
+    R.departPendingPlay = true
+    host.say("正在抵达营地…", 3)
+    return
+  end
+  R.departPendingPlay = false
   R.scene = "play"
-  CampPreload.ensure()
   host.ensureWalk(R.player.castId or 1)
   local spawn = Destinations.current().spawn
   R.player.x, R.player.y = spawn.x, spawn.y
@@ -192,6 +204,7 @@ end
 function Flow.goDiary()
   R.scene = "diary"
   R.diaryPage = 1
+  if host.releaseStory then host.releaseStory("h1") end
   host.ensureStory("diary_desk")
   host.ensureStory("diary_tn")
   host.ensureStory("diary")
@@ -217,9 +230,12 @@ function Flow.finishDiary()
 end
 
 function Flow.goHomecoming()
+  CampPreload.reset(Destinations.currentId())
   R.scene = "homecoming"
   Story.homecoming.i = 1
   host.ensureStory("h1")
+  host.ensureStory("diary_desk")
+  host.ensureStory("diary_tn")
   R.ritual = nil
   Audio.stopAmb()
   Flow.syncSceneBgm()
@@ -259,6 +275,7 @@ function Flow.confirmCast()
 end
 
 function Flow.startJourney()
+  R.departPendingPlay = false
   Flow.goPrologue()
 end
 

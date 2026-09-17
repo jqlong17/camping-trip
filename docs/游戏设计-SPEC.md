@@ -483,6 +483,15 @@ SFX **不必用 Suno**（不擅长短反馈音）。放入 `game/audio/`，P2 �
 | **DEV-114** | 2026-09-02 | done | **林间连续远景层**：沿用海边“完整远景＋交互前景”结构，新增 400×80 文生图高树林带，混合高大针叶林、阔叶树冠、林缘草地与溪流入口；顶部五行改为明确不可进入的 `distant-forest`，隐藏坐标、树上鸟点和 Story Atlas 摆放同步移除，前景草地、溪岸、踏脚石、帐篷及全部玩法保持原坐标。 |
 | **DEV-115** | 2026-09-02 | done | **海岸动物比例与运动修正**：螃蟹从约 34×18px 缩至约 26×13px，保留双钳、足和深色轮廓；海鸥保留礁石停留、落地、起飞三段，但落地活动从复用林鸟正弦弹跳改为贴地横走五步，消除蚂蚱式上下蹦跳。 |
 | **DEV-116** | 2026-09-02 | done | **海边真机硬卡死防护**：真机日志显示海边进入后无 Lua 异常，但持续并行 MP3 stream 且高频调用 `isPlaying/setVolume`，随后音频与 HOME 键同时失效；海浪改为 12 秒 22050Hz mono PCM WAV 静态无缝循环，环境音同步改为 0.75 秒节流＋状态变化时才操作 Source，避免音频线程锁竞争。目的地确认后在两张出发分镜期间逐步预载营地，步骤逐项记录耗时；修复海边仍预取森林 `d1.t3x`。 |
+| **DEV-117** | 2026-09-12 | done | **海边点手冲卡住**：`ensureRitual` 原先一次加载手冲+泡茶+钓鱼+杯子+做饭约百张 T3X，海边已有日出/日落海面层时更容易卡死或假死。改为按仪式种类懒加载；泡茶上屏预览改走单纹理缓存。下屏点装备直接使用，仪式选项格可点选/再点确认。 |
+| **DEV-118** | 2026-09-12 | done | **做饭下屏图看不见**：`rectangle(..., rx, ry)` 在 LovePotion 真机中断下屏绘制，选项图标整排消失；浅色锅叠在米色格上桌面也几乎隐形。去掉圆角参数，选项格改手冲同款不透明槽+深木底，背包图标同样垫底。 |
+| **DEV-119** | 2026-09-13 | done | **真机日志对齐 DEV-117/118**：`load_report` 在海边点仪式时一次加载茶/钓/杯/做饭，随后整批 `Failed to create Texture!`（含全部 `ritual/cook/*`），同窗 `maxDtMs=49221`；手冲预览也逐张失败。与「点手冲卡住 + 做饭下屏没图」吻合，根因是显存被一次打满，不是文件没拷上。 |
+| **DEV-120** | 2026-09-13 | done | **出发页按 A 卡十几秒**：真机 `ensureCamp` 14767ms，最肥一步 7s 一次读 9 杯+6 装备。预载拆成每帧少量图；杯子改选杯时再读；日落海面黄昏才读；最后一页 A 不再 `ensure()` 堵死，显示「正在抵达营地」切完再进 play。 |
+| **DEV-121** | 2026-09-13 | done | **标题「继续」被预载门闩拽去出发页**：`goPlay` 未 ready 时不得 `goDepart()`。标题继续留在主菜单等预载，出发最后一页才就地等待。 |
+| **DEV-122** | 2026-09-13 | done | **日记上屏全黑**：回家时营地/仪式纹理仍占显存，`diary_desk` 创建失败且 `diaryTop` 无底色。`goHomecoming` 先 `releasePlayTextures`，日记上屏先铺木色底并用 `drawStoryFrame`。 |
+| **DEV-123** | 2026-09-13 | done | **真机林间掉到十几帧**：`load_report` 显示 `creek mode=stream` 后 70/75 帧都慢，停了也不恢复；手冲 9.8s、泡茶 11.7s 后成片 `Failed to create Texture`。溪水改 PCM 静态循环；仪式按阶段加载并在换仪式时释放上一套。 |
+| **DEV-124** | 2026-09-13 | done | **出发预载约 20 秒**：真机 `ensureCamp` 20053ms / 24 步，一半在鱼鸟虫，收获图标未使用还占 2.2s，展开帐篷出发时看不见。真机 essential 只预载看得见的（静态底、海面、一张影子、收纳帐篷+篝火、当前立绘+走表、装备图标）；鱼鸟虫进营后 `after()` 补；`tent_open_hd` 搭帐时再读；删 `fruitIcon`/`fishIcons`。`ready()` 在 essential 完成后即可进营，禁止绘制路径再 `ensure()`。 |
+| **DEV-125** | 2026-09-18 | done | **开源到 GitHub**：新建公开仓库 `jqlong17/camping-trip`，README 写清 Homebrew `.3dsx` 与 FBI CIA 两条安装路径，并鼓励共建。Release 提供 `CampingTrip.cia` 与 `CampingTrip-3dsx.zip`。日常开发仍以 3dsx 为准；CIA 仅作发行物，禁止放进 `sd:/3ds/CampingTrip/`。 |
 | **DEV-012** | — | planned | **P1** 加深：更多时段事件（搭帐篷动画、手冲小游戏） |
 | **DEV-014** | — | planned | **P3** 精修回家：次日收拾动画、周末计数 |
 | **DEV-015** | 2026-08-30 | done | 基础 SFX 清单齐：UI + 脚步/帐篷/手冲/杯子/扇子/点灯 |
@@ -541,12 +550,12 @@ perf scene=play frames=... slow=... maxDtMs=... mode=static_play_fx/console_sing
 
 当前修正：
 
-- build 标记：`2026-08-31-depart-camp-preload`。
-- `ensureCamp()` 保留为强制完成入口，但内部改用 `campPreload` 步进器。
-- `goDepart()` 会立即 `beginCampPreload("depart")`，用户阅读出发分镜时后台每帧加载一小步。
-- `love.update()` 在 `scene == "depart"` 时继续执行 `runCampPreloadSlice()`；桌面每帧 3 步，真机每帧 1 步，避免单帧尖峰太大。
-- 若用户很快在最后一句按 A，而 `campReady` 尚未完成，会显示「营地还在整理 · 马上就好」；加载完成后自动 `goPlay()`，不再黑屏式同步等待。
-- 本地 `load_report.txt` 应看到 `camp_preload_begin reason=depart ...` 早于 `scene=play`，并看到 `ensureCamp done ... steps=20`。
+- build 标记：`2026-09-13-camp-preload-slice`（DEV-120）。
+- `CampPreload.ensure()` 只作图鉴/绘制兜底；`goPlay()` 禁止同步堵死。
+- 选好地点后 `CampPreload.begin()`，出发分镜期间每帧 `runSlice(1)`。
+- 杯子 9 款与日落海面不进出发预载；选杯 / 黄昏再读。
+- 若用户很快在最后一句按 A，而尚未 ready，底栏与 toast 显示「正在抵达营地…」，`pumpDepartArrival` 完成后自动进 play。
+- 本地 `load_report.txt` 应看到 `camp_preload_begin` 早于 `scene=play`，且单步 `durationMs` 不再出现整秒级尖峰。
 
 下一轮真机测试重点：
 

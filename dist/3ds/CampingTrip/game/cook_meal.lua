@@ -104,7 +104,7 @@ end
 
 function C.start()
   local h = H()
-  h.ensureRitual()
+  h.ensureRitual("cook")
   h.setRitual({
     kind = "cook",
     phase = "cuisine",
@@ -158,26 +158,47 @@ function C.cancel()
 end
 
 function C.loadChoiceAssets(bucket, loadImage)
+  bucket._loadImage = loadImage
+end
+
+function C.ensurePhaseAssets(bucket, phase)
+  if not bucket or not bucket._loadImage then return end
+  local load = bucket._loadImage
   local base = "assets/ritual/cook/"
-  bucket.cookCuisines, bucket.cookHeats, bucket.cookSeasons = {}, {}, {}
-  bucket.cookBrew = {
-    loadImage(base .. "cook_1.png"),
-    loadImage(base .. "cook_2.png"),
-    loadImage(base .. "cook_3.png")
-  }
-  for _, c in ipairs(C.cuisines) do
-    bucket.cookCuisines[c.id] = loadImage(base .. "cuisine_" .. c.id .. ".png")
+  if phase and (phase.kind == "confirm" or phase.id == "prep") and not bucket.cookCuisines then
+    bucket.cookCuisines = {}
+    for _, cuisine in ipairs(C.cuisines) do
+      bucket.cookCuisines[cuisine.id] = load(base .. "cuisine_" .. cuisine.id .. ".png")
+    end
   end
-  for _, h in ipairs(C.heats) do
-    bucket.cookHeats[h.id] = loadImage(base .. "heat_" .. h.id .. ".png")
+  if phase and phase.kind == "brew" and not (bucket.cookBrew and bucket.cookBrew[1]) then
+    bucket.cookBrew = {
+      load(base .. "cook_1.png"),
+      load(base .. "cook_2.png"),
+      load(base .. "cook_3.png")
+    }
   end
-  for _, s in ipairs(C.seasons) do
-    bucket.cookSeasons[s.id] = loadImage(base .. "season_" .. s.id .. ".png")
+  if phase and phase.assetBag == "cookCuisines" and not bucket.cookCuisines then
+    bucket.cookCuisines = {}
+    for _, cuisine in ipairs(C.cuisines) do
+      bucket.cookCuisines[cuisine.id] = load(base .. "cuisine_" .. cuisine.id .. ".png")
+    end
+  elseif phase and phase.assetBag == "cookHeats" and not bucket.cookHeats then
+    bucket.cookHeats = {}
+    for _, heat in ipairs(C.heats) do
+      bucket.cookHeats[heat.id] = load(base .. "heat_" .. heat.id .. ".png")
+    end
+  elseif phase and phase.assetBag == "cookSeasons" and not bucket.cookSeasons then
+    bucket.cookSeasons = {}
+    for _, season in ipairs(C.seasons) do
+      bucket.cookSeasons[season.id] = load(base .. "season_" .. season.id .. ".png")
+    end
   end
 end
 
 function C.drawTop(ritual, assets, context)
   local phase = C.phaseById(ritual.phase)
+  C.ensurePhaseAssets(assets, phase)
   love.graphics.setColor(0.12, 0.14, 0.12, 1)
   love.graphics.rectangle("fill", 0, 0, context.TOP_W, context.TOP_H)
   love.graphics.setColor(1, 1, 1, 1)
@@ -231,12 +252,20 @@ end
 
 function C.drawBottom(ritual, assets, context)
   local phase = C.phaseById(ritual.phase)
+  C.ensurePhaseAssets(assets, phase)
   local BOT_W = context.BOT_W
-  love.graphics.setColor(0.95, 0.92, 0.86, 1)
+  -- 真机 LovePotion 的 rectangle 不接受圆角参数；多传 rx,ry 会直接中断下屏绘制。
+  love.graphics.setColor(0.93, 0.88, 0.76, 1)
   love.graphics.rectangle("fill", 0, 0, BOT_W, context.BOT_H or 240)
-  love.graphics.setColor(0.2, 0.16, 0.12, 1)
+  love.graphics.setColor(0.32, 0.22, 0.14, 1)
+  love.graphics.rectangle("fill", 6, 6, BOT_W - 12, 28)
+  love.graphics.setColor(1, 0.96, 0.88, 1)
   local idx = select(2, C.phaseById(ritual.phase)) or 1
-  love.graphics.print(tostring(idx) .. "·" .. #C.PHASES .. " " .. (phase and phase.head or "做饭"), 12, 16)
+  local head = tostring(idx) .. "·" .. #C.PHASES .. " " .. (phase and phase.head or "做饭")
+  if phase and phase.kind == "brew" then
+    head = head .. " · " .. tostring(ritual.brewStep) .. "·3"
+  end
+  love.graphics.printf(head, 10, 12, BOT_W - 20, "left")
   if phase and phase.kind == "choice" then
     local list = C.catalogFor(phase)
     local bag = assets and phase.assetBag and assets[phase.assetBag]
@@ -245,35 +274,57 @@ function C.drawBottom(ritual, assets, context)
     for i, item in ipairs(list or {}) do
       local x = 10 + (i - 1) * slot
       local on = i == ritual.pick
-      love.graphics.setColor(on and 0.95 or 0.2, on and 0.9 or 0.2, on and 0.7 or 0.2, on and 0.35 or 0.15)
-      love.graphics.rectangle("fill", x, 70, slot - 6, 78, 4, 4)
-      love.graphics.setColor(1, 1, 1, 1)
+      local boxW = slot - 4
+      love.graphics.setColor(on and 0.98 or 0.94, on and 0.88 or 0.9, on and 0.55 or 0.82)
+      love.graphics.rectangle("fill", x, 48, boxW, 96)
+      love.graphics.setColor(0.3, 0.2, 0.12)
+      love.graphics.rectangle("line", x, 48, boxW, 96)
       local icon = bag and bag[item.id]
       if icon then
         local iw, ih = icon:getWidth(), icon:getHeight()
         local s = math.min(40 / iw, 40 / ih)
-        love.graphics.draw(icon, x + (slot - 6 - iw * s) / 2, 78 + (40 - ih * s) / 2, 0, s, s)
+        local ix = x + (boxW - iw * s) / 2
+        love.graphics.setColor(0.45, 0.34, 0.22, 1)
+        love.graphics.rectangle("fill", ix - 2, 54, iw * s + 4, 44)
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.draw(icon, ix, 56, 0, s, s)
       end
-      love.graphics.setColor(0.15, 0.12, 0.1, 1)
-      love.graphics.printf(item.name, x, 124, slot - 6, "center")
+      love.graphics.setColor(0.22, 0.14, 0.08)
+      love.graphics.printf(item.name, x, 108, boxW, "center")
     end
     local cur = list and list[ritual.pick]
     if cur then
-      love.graphics.setColor(0.2, 0.18, 0.14, 1)
-      love.graphics.printf(cur.note or "", 12, 160, BOT_W - 24, "center")
+      love.graphics.setColor(0.4, 0.3, 0.2)
+      love.graphics.printf(cur.note or "", 12, 152, BOT_W - 24, "center")
     end
   elseif phase and phase.kind == "confirm" then
     local cu = C.cuisines[ritual.cuisineI or 1]
     local he = C.heats[ritual.heatI or 2]
     local se = C.seasons[ritual.seasonI or 1]
-    love.graphics.printf((cu and cu.name or "") .. " · " .. (he and he.name or "") .. " · " .. (se and se.name or ""), 12, 90, BOT_W - 24, "center")
-    love.graphics.printf("A 开火", 12, 130, BOT_W - 24, "center")
-  elseif phase and phase.kind == "brew" then
-    love.graphics.printf((C.brewLabels[ritual.brewStep] or "烹饪") .. " · A 下一步", 12, 100, BOT_W - 24, "center")
+    love.graphics.setColor(0.25, 0.18, 0.1)
+    love.graphics.printf((cu and cu.name or "") .. " · " .. (he and he.name or "") .. " · " .. (se and se.name or ""), 16, 80, BOT_W - 32, "center")
+    love.graphics.printf("备菜摆好了。开火吧。", 16, 110, BOT_W - 32, "center")
+    local icon = assets and assets.cookCuisines and cu and assets.cookCuisines[cu.id]
+    if icon then
+      local iw, ih = icon:getWidth(), icon:getHeight()
+      local s = math.min(48 / iw, 48 / ih)
+      love.graphics.setColor(0.45, 0.34, 0.22, 1)
+      love.graphics.rectangle("fill", 136, 138, 48, 48)
+      love.graphics.setColor(1, 1, 1, 1)
+      love.graphics.draw(icon, 136 + (48 - iw * s) / 2, 138 + (48 - ih * s) / 2, 0, s, s)
+    end
+  else
+    love.graphics.setColor(0.25, 0.18, 0.1)
+    love.graphics.printf((C.brewLabels[ritual.brewStep] or "烹饪") .. " · 按 A 下一步", 16, 100, BOT_W - 32, "center")
   end
-  love.graphics.setColor(0.35, 0.3, 0.25, 1)
-  love.graphics.print("A 确认", 128, 213)
-  love.graphics.print("B 取消", 220, 213)
+  love.graphics.setColor(0.35, 0.55, 0.35)
+  love.graphics.rectangle("fill", 100, 210, 120, 22)
+  love.graphics.setColor(1, 1, 1)
+  love.graphics.printf((phase and phase.kind == "brew") and "A 下一步" or "A 确认", 100, 213, 120, "center")
+  love.graphics.setColor(0.55, 0.4, 0.35)
+  love.graphics.rectangle("fill", 230, 210, 70, 22)
+  love.graphics.setColor(1, 1, 1)
+  love.graphics.printf("取消", 230, 213, 70, "center")
 end
 
 return C

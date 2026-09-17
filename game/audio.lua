@@ -62,10 +62,10 @@ function Audio.loadBgm()
     Audio.bgm.title = tagSrc(tryLoad("bgm_01_title.mp3"), "title")
     Audio.bgm.morning = tagSrc(tryLoad("bgm_02_morning.mp3") or tryLoad("bgm_02_morning.ogg"), "morning")
     Audio.bgm.night = tagSrc(tryLoad("bgm_03_night.mp3"), "night")
-    Audio.amb.creek = tryLoad("amb_creek.mp3", 0.22)
-    -- 真机海浪使用短 PCM 静态循环，避免并行 MP3 stream 长时间运行后锁死音频线程。
+    -- 真机水声一律短 PCM 静态循环。林间 creek MP3 stream 会把帧率打到十几，停了也不恢复。
+    Audio.amb.creek = tryLoad("amb_creek.wav", 0.22, "static")
     Audio.amb.ocean = tryLoad("amb_ocean_waves.wav", 0.18, "static")
-    appendLog("audio mode=" .. consoleAudioMode .. " bgm=3 amb=creek_prox,ocean_pcm_static")
+    appendLog("audio mode=" .. consoleAudioMode .. " bgm=3 amb=creek_pcm_static,ocean_pcm_static")
     return
   end
 
@@ -194,7 +194,7 @@ function Audio.syncAmbient()
         waterSrc:play()
       end)
       consoleAmbient.playing, consoleAmbient.volume = true, wantedVolume
-      appendLog("audio ambient_start kind=" .. waterKind .. " mode=" .. (waterKind == "ocean" and "pcm_static" or "stream"))
+      appendLog("audio ambient_start kind=" .. waterKind .. " mode=pcm_static")
     elseif shouldPlay and consoleAmbient.volume ~= wantedVolume then
       pcall(function() waterSrc:setVolume(wantedVolume) end)
       consoleAmbient.volume = wantedVolume

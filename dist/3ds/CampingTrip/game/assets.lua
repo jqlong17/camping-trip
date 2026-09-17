@@ -21,6 +21,43 @@ function Assets.failCount()
   return loadFailCount
 end
 
+local function releaseValue(value)
+  if type(value) == "userdata" then
+    pcall(function()
+      if value.release then value:release() end
+    end)
+  elseif type(value) == "table" then
+    for key, item in pairs(value) do
+      releaseValue(item)
+      value[key] = nil
+    end
+  end
+end
+
+-- 离开营地时丢掉世界/仪式纹理，给回家分镜和日记腾显存。
+function Assets.releasePlayTextures()
+  for _, key in ipairs({
+    "grass", "water", "shallow", "trees", "bushes", "flowers", "stones", "dirt",
+    "campStaticBase", "coastOceanSunrise", "coastOceanSunset", "forestDistantCanopy",
+    "reed", "log", "stump", "pier", "nest", "shore", "dirtFringe",
+    "fish", "birds", "butterfly", "dragonfly", "firefly", "crab",
+    "tentOpen", "tent", "tentPacked", "firepit", "brewKit", "steam", "cupIcons",
+    "player", "shadow", "shadowSm", "shadowTree", "fruitIcon", "fishIcons",
+    "ritual", "topPreview",
+  }) do
+    releaseValue(store[key])
+    store[key] = nil
+  end
+  store.ritual = { ready = false, readyKinds = {}, drip = {}, fishAnim = {} }
+  store.topPreview = {}
+  store.cupIcons = {}
+  failedImages = {}
+  if collectgarbage then pcall(collectgarbage, "collect") end
+  if host and host.appendLoadLog then
+    host.appendLoadLog("releasePlayTextures")
+  end
+end
+
 function Assets.root()
   return assetRoot
 end
@@ -167,12 +204,61 @@ function Assets.ensureStory(key)
   return store.story[key]
 end
 
+function Assets.releaseStory(key)
+  if not store.story then return end
+  releaseValue(store.story[key])
+  store.story[key] = nil
+  local AP = host and host.AP
+  if AP then failedImages[AP.story(key)] = nil end
+end
+
+function Assets.ensureCupIcon(i)
+  store.cupIcons = store.cupIcons or {}
+  if store.cupIcons[i] then return store.cupIcons[i] end
+  local AP = host and host.AP
+  local style = AP and AP.CUP_STYLES[i]
+  if not style then return nil end
+  store.cupIcons[i] = Assets.load(AP.cupPath(style.file))
+  return store.cupIcons[i]
+end
+
+function Assets.ensureCupIconsSlice()
+  local AP = host and host.AP
+  if not AP then return end
+  store.cupIcons = store.cupIcons or {}
+  for i = 1, #AP.CUP_STYLES do
+    if not store.cupIcons[i] then
+      Assets.ensureCupIcon(i)
+      return
+    end
+  end
+end
+
+function Assets.ensureCoastOcean(timeIndex)
+  local AP = host and host.AP
+  if not AP then return end
+  if timeIndex == 1 and not store.coastOceanSunrise then
+    store.coastOceanSunrise = Assets.load(AP.sceneCamp("coast_ocean_sunrise.png"))
+  elseif timeIndex == 4 and not store.coastOceanSunset then
+    store.coastOceanSunset = Assets.load(AP.sceneCamp("coast_ocean_sunset.png"))
+  end
+end
+
 function Assets.ensureCast(i)
   store.cast = store.cast or {}
   if not store.cast[i] then
     store.cast[i] = Assets.load("assets/cast/c" .. i .. ".png")
   end
   return store.cast[i]
+end
+
+function Assets.ensureTentOpen()
+  if store.tentOpen then return store.tentOpen end
+  local AP = host and host.AP
+  if not AP then return nil end
+  store.tentOpen = Assets.load(AP.forestCamp("tent_open_hd.png"))
+  if store.tentOpen then store.tent = store.tentOpen end
+  return store.tentOpen
 end
 
 function Assets.ensureWalk(i)
@@ -215,21 +301,77 @@ function Assets.ensureCastPreview(i)
   return Assets.ensureTopPreview("assets/previews/cast/c" .. tostring(i) .. ".png")
 end
 
-function Assets.ensureRitual()
-  if store.ritual and store.ritual.ready then return store.ritual end
-  store.ritual = {
-    ready = true,
+function Assets.releaseOtherRituals()
+  local bucket = store.ritual
+  if not bucket then return end
+  for key, value in pairs(bucket) do
+    if key ~= "readyKinds" and key ~= "ready" and key ~= "fishAnim" then
+      releaseValue(value)
+      bucket[key] = nil
+    end
+  end
+  bucket.drip = {}
+  bucket.readyKinds = {}
+  bucket.ready = false
+  if collectgarbage then pcall(collectgarbage, "collect") end
+  if host and host.appendLoadLog then
+    host.appendLoadLog("releaseOtherRituals")
+  end
+end
+
+function Assets.ensureRitual(kind)
+  store.ritual = store.ritual or {
     drip = {},
     fishAnim = {},
   }
-  local AP = host and host.AP
-  DripBrew.loadChoiceAssets(store.ritual, Assets.load)
-  TeaBrew.loadChoiceAssets(store.ritual, Assets.load)
-  FishRod.loadChoiceAssets(store.ritual, Assets.load)
-  TentGear.loadPitchFrames(store.ritual, Assets.load)
-  CupSip.loadChoiceAssets(store.ritual, Assets.load)
-  CookMeal.loadChoiceAssets(store.ritual, Assets.load)
-  return store.ritual
+  local bucket = store.ritual
+  bucket.readyKinds = bucket.readyKinds or {}
+  bucket.drip = bucket.drip or {}
+  bucket.fishAnim = bucket.fishAnim or {}
+  if kind == nil then
+    if host and host.isConsole then
+      return bucket
+    end
+    Assets.ensureRitual("drip")
+    Assets.ensureRitual("tea")
+    Assets.ensureRitual("rod")
+    Assets.ensureRitual("tent")
+    Assets.ensureRitual("cup")
+    Assets.ensureRitual("cook")
+    bucket.ready = true
+    return bucket
+  end
+  if bucket.readyKinds[kind] then return bucket end
+  if host and host.isConsole then
+    local busy = false
+    for other, ready in pairs(bucket.readyKinds) do
+      if ready and other ~= kind and other ~= "cup_sip" then busy = true end
+    end
+    if busy then
+      Assets.releaseOtherRituals()
+      bucket = store.ritual
+    end
+  end
+  if host and host.appendLoadLog then
+    host.appendLoadLog("ensureRitual kind=" .. tostring(kind))
+  end
+  if kind == "drip" then
+    DripBrew.loadChoiceAssets(bucket, Assets.load)
+  elseif kind == "tea" then
+    TeaBrew.loadChoiceAssets(bucket, Assets.load)
+  elseif kind == "rod" then
+    FishRod.loadChoiceAssets(bucket, Assets.load)
+  elseif kind == "tent" then
+    TentGear.loadPitchFrames(bucket, Assets.load)
+  elseif kind == "cup" or kind == "cup_sip" then
+    CupSip.loadChoiceAssets(bucket, Assets.load)
+  elseif kind == "cook" then
+    CookMeal.loadChoiceAssets(bucket, Assets.load)
+  end
+  bucket.readyKinds[kind] = true
+  bucket.readyKinds.cup_sip = bucket.readyKinds.cup or bucket.readyKinds.cup_sip
+  bucket.ready = true
+  return bucket
 end
 
 function Assets.newFont(size)
@@ -258,7 +400,7 @@ function Assets.loadBoot()
   store.packBg = Assets.load(AP.ui("ui_pack_bg.png"))
   store.story, store.cast, store.walk = {}, {}, {}
   store.topPreview = {}
-  store.ritual = { ready = false, drip = {}, fishAnim = {} }
+  store.ritual = { ready = false, readyKinds = {}, drip = {}, fishAnim = {} }
   if host and host.appendLoadLog then
     host.appendLoadLog("loadAssets title done fails=" .. loadFailCount)
   end

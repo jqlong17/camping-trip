@@ -769,12 +769,13 @@ homecoming → diary → Flow.finishDiary()
 fruit 等累计。测试虽然确定性地覆盖首次选角，但不是隔离测试。后续应增加
 `Persist.bindStorage()`、测试 identity 或内存存储，让 playtest 不修改玩家存档。
 
-**P0 — 分步预加载目前没有接入主循环**
+**P0 — 分步预加载已接入主循环（DEV-120）**
 
-`camp_preload.lua` 提供 `begin/runSlice`，但当前 `scene_flow.goPlay()` 直接调用
-`CampPreload.ensure()`；`main.update()` 也未在 depart 场景运行 slice。因此真机可能重新出现
-“出发页按 A 后同步卡住”的旧问题。应恢复 depart 提前 `begin()` + update `runSlice()`，
-并保留未 ready 时的转场保护。
+`confirmDestination` 后 `CampPreload.begin()`；`main.update()` 在 **depart 和 play**
+每帧 `runSlice(1)`。`ready()` 在 essential 完成后即为真，later 步继续在营地里补。
+`goPlay()` 未 ready 时只设 `departPendingPlay` 并提示「正在抵达营地…」，
+由 `Flow.pumpDepartArrival()` 在 ready 后进营。禁止再把 `CampPreload.ensure()` 塞回
+`goPlay()` 或 `CampRender.drawPlayTop`（会把 later 一次堵死）。图鉴仍可 `ensure()`。
 
 **P1 — 全局注册与 Host 注入混用**
 
@@ -818,7 +819,7 @@ Git 会记录大量重复文件。Agent 应修改 `game/`，验收后再用部�
 
 **P2 — 少量残留与脆弱校验**
 
-- `Runtime.departPendingPlay` 当前没有消费者，可在确认无真机分步加载恢复需求后删除。
+- `Runtime.departPendingPlay` 由 `goPlay` / `pumpDepartArrival` / 出发底栏共用，不要删。
 - `verify-3ds-install.py` 仍通过源码文本特征做部分架构检查，重命名 API 时需要同步更新。
 - 当前以 integration playtest 为主，没有独立模块单测；纯函数（口感、钓鱼结算、JSON）
   未来适合增加轻量 Lua 测试。

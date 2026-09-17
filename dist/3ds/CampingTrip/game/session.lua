@@ -77,10 +77,10 @@ function Session.cupSlotRect(i)
 end
 
 function Session.applyCupIcon()
-  local icons = Assets.get().cupIcons
-  if not icons then return end
+  local icon = Assets.ensureCupIcon(R.cupStyle)
+  if not icon then return end
   for _, gear in ipairs(R.gear) do
-    if gear.id == "cup" then gear.icon = icons[R.cupStyle] or gear.icon end
+    if gear.id == "cup" then gear.icon = icon end
   end
 end
 

@@ -161,20 +161,34 @@ function StoryDraw.castBottom()
 end
 
 function StoryDraw.diaryTop()
+  love.graphics.setColor(0.42, 0.28, 0.16, 1)
+  love.graphics.rectangle("fill", 0, 0, R.TOP_W, R.TOP_H)
   love.graphics.setColor(1, 1, 1, 1)
   local desk = Assets.ensureStory("diary_desk") or Assets.ensureStory("diary")
-  if desk then Assets.drawFitted(desk, 0, 0, R.TOP_W, R.TOP_H) end
+  if desk then
+    Assets.drawStoryFrame(desk, 0, 0, R.TOP_W, R.TOP_H)
+  end
 
-  -- 手帐本固定内容区 120×210（真机纹理可能更大）
+  -- 手帐本固定内容区 120×210（真机 T3X 可能被 pad 到 2 的幂）
   local tn = Assets.ensureStory("diary_tn")
   local tnW, tnH = 120, 210
   local tnX = math.floor((R.TOP_W - tnW) / 2 - 28)
   local tnY = math.floor((R.TOP_H - tnH) / 2)
   if tn then
-    if Assets.drawFitted then
-      Assets.drawFitted(tn, tnX, tnY, tnW, tnH, 1, 1)
+    local iw, ih = tn:getWidth(), tn:getHeight()
+    local cw, ch = math.min(tnW, iw), math.min(tnH, ih)
+    local scale = math.min(tnW / cw, tnH / ch)
+    local ox = tnX + math.floor((tnW - cw * scale) / 2)
+    local oy = tnY + math.floor((tnH - ch * scale) / 2)
+    if cw == iw and ch == ih then
+      love.graphics.draw(tn, ox, oy, 0, scale, scale)
     else
-      love.graphics.draw(tn, tnX, tnY)
+      local ok, quad = pcall(love.graphics.newQuad, 0, 0, cw, ch, iw, ih)
+      if ok and quad then
+        love.graphics.draw(tn, quad, ox, oy, 0, scale, scale)
+      else
+        love.graphics.draw(tn, ox, oy, 0, scale, scale)
+      end
     end
   end
 

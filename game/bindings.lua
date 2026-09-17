@@ -94,6 +94,7 @@ function Bindings.bind()
   local helpers = {
     say = Toast.say,
     ensureStory = Assets.ensureStory,
+    releaseStory = Assets.releaseStory,
     ensureCast = Assets.ensureCast,
     ensureWalk = Assets.ensureWalk,
     ensureRitual = Assets.ensureRitual,

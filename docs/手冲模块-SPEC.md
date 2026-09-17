@@ -49,7 +49,7 @@ LovePotion / 桌面 LÖVE：`require("drip_brew")`（与 `main.lua` 同目录）
 | `getRitual` / `setRitual` / `clearRitual` | 仪式态 |
 | `getPot` → `drippedOnce, coffeeCups` | 壶状态 |
 | `setPot(drippedOnce, coffeeCups)` | 写回壶状态 |
-| `ensureRitual` | 懒加载含手冲图的 `assets.ritual` |
+| `ensureRitual("drip")` | 只懒加载手冲图；禁止顺带加载泡茶/钓鱼整包 |
 | `drinkCoffee` | 壶未空时选手冲 → 改喝 |
 | `selectCup` | 冲完自动选中杯子装备 |
 | `onBrewMap(x, y, timer)` | 地图冲煮台 / 蒸汽计时 |

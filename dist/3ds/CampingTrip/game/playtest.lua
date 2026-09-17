@@ -101,8 +101,18 @@ function Playtest.tick(dt)
       Playtest.t = 0
       return
     end
-    Playtest.shot("04b_" .. TEST_DESTINATION .. "_arrive")
-    E.advanceDepart()
+    if not Playtest._arrivalGo then
+      Playtest.shot("04b_" .. TEST_DESTINATION .. "_arrive")
+      E.advanceDepart()
+      Playtest._arrivalGo = true
+      Playtest.t = 0
+    end
+    if E.scene ~= "play" then
+      if Playtest.t > 20 then
+        Playtest.fail("arrival timeout scene=" .. tostring(E.scene))
+      end
+      return
+    end
     Playtest.log("-> " .. E.scene .. " destination=" .. Destinations.currentId())
     nextStep()
   elseif s == 12 and t > 1.15 then
@@ -194,14 +204,22 @@ function Playtest.tick(dt)
       E.player.x, E.player.y = 10, 10
       Playtest.shot("05b2_tent_player_front")
       Playtest._tentShotPhase = 2
-    elseif Playtest._tentShotPhase == 2 and t > 1.0 then
+    elseif Playtest._tentShotPhase == 2 then
       Playtest.log("tentYSort=behind_occluded front_visible")
       nextStep()
     end
   elseif s == 16 and t > 0.2 then
     E.selected = 2
-    E.tryUseGear() -- start drip wizard
+    local started, startErr = pcall(E.tryUseGear)
+    if not started then
+      Playtest.fail("drip_start_error " .. tostring(startErr))
+      return
+    end
     Playtest.log("ritual=" .. tostring(E.ritual and E.ritual.kind) .. " phase=" .. tostring(E.ritual and E.ritual.phase))
+    local bag = Assets.get().ritual
+    local dripOnly = bag and bag.readyKinds and bag.readyKinds.drip == true and bag.readyKinds.tea ~= true
+    Playtest.log("dripOnly=" .. tostring(dripOnly))
+    if not Playtest.require(dripOnly, "drip_must_not_preload_tea") then return end
     nextStep()
   elseif s == 17 and t > 0.25 then
     if not Playtest._dripPreviewShot then
@@ -456,22 +474,41 @@ function Playtest.tick(dt)
     nextStep()
   elseif s == 40 and t > 0.35 then Playtest.shot("08_back_title"); nextStep()
   elseif s == 41 and t > 0.2 then
+    if not Playtest._titleContinue then
+      E.menuIndex = 2
+      E.confirmMenu()
+      Playtest._titleContinue = true
+      Playtest.t = 0
+      return
+    end
+    if E.scene == "depart" then
+      Playtest.fail("title continue jumped to depart")
+      return
+    end
+    if E.scene ~= "play" then
+      if Playtest.t > 20 then Playtest.fail("title continue timeout scene=" .. tostring(E.scene)) end
+      return
+    end
+    Playtest.log("titleContinue -> play")
+    E.goTitle()
+    nextStep()
+  elseif s == 42 and t > 0.2 then
     E.menuIndex = 4 -- 装备图鉴
     E.confirmMenu()
     Playtest.log("-> " .. E.scene)
     nextStep()
-  elseif s == 42 and t > 0.35 then Playtest.shot("09_codex"); nextStep()
-  elseif s == 43 and t > 0.15 then E.moveCodex(1); nextStep()
-  elseif s == 44 and t > 0.25 then
+  elseif s == 43 and t > 0.35 then Playtest.shot("09_codex"); nextStep()
+  elseif s == 44 and t > 0.15 then E.moveCodex(1); nextStep()
+  elseif s == 45 and t > 0.25 then
     Playtest.log("codex=" .. tostring(E.gear[E.codex.i] and E.gear[E.codex.i].id))
     nextStep()
-  elseif s == 45 and t > 0.2 then
+  elseif s == 46 and t > 0.2 then
     E.goTitle()
     E.menuIndex = 5 -- 关于
     E.confirmMenu()
     Playtest.log("-> " .. E.scene)
     nextStep()
-  elseif s == 46 and t > 0.35 then
+  elseif s == 47 and t > 0.35 then
     Playtest.shot("10_about")
     Playtest.log("steps=" .. tostring(Playtest.step + 1))
     love.filesystem.write(Playtest.outDir .. "/result.txt", table.concat(Playtest.lines, "\n") .. "\nPASS\n")

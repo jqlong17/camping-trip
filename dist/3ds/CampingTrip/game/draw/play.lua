@@ -68,8 +68,12 @@ local function gearGrid()
     if gear.icon then
       local iw, ih = gear.icon:getWidth(), gear.icon:getHeight()
       local scale = math.min(36 / iw, 28 / ih)
+      local ix = gear.x + (80 - iw * scale) / 2
+      -- 浅色锅/杯在米色格上会“像没加载”；垫一块深木底。
+      love.graphics.setColor(0.45, 0.34, 0.22, 1)
+      love.graphics.rectangle("fill", gear.x + 16, gear.y + 5, 48, 32)
       love.graphics.setColor(1, 1, 1, 1)
-      love.graphics.draw(gear.icon, gear.x + (80 - iw * scale) / 2, gear.y + 4, 0, scale, scale)
+      love.graphics.draw(gear.icon, ix, gear.y + 4, 0, scale, scale)
     end
     love.graphics.setColor(0.22, 0.16, 0.1)
     local width = R.uiFont and R.uiFont:getWidth(gear.name) or 28
@@ -83,6 +87,7 @@ local function cupPicker()
   love.graphics.setColor(1, 0.96, 0.88)
   love.graphics.print("选杯子 · 方向键 · A 喝", 14, 12)
   local assets = Assets.get()
+  Assets.ensureCupIconsSlice()
   for i, style in ipairs(AP.CUP_STYLES) do
     local x, y, width, height = Session.cupSlotRect(i)
     local on = i == R.cupStyle

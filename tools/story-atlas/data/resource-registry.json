@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "next": 638,
+  "next": 642,
   "entries": {
     "cia/audio.wav": "RES-0001",
     "cia/banner.png": "RES-0002",
@@ -11,6 +11,10 @@
     "docs/promo/butterfly_1_gen_ref.png": "RES-0006",
     "docs/promo/butterfly_wing_closed_gen_ref.png": "RES-0007",
     "docs/promo/butterfly_wing_open_gen_ref.png": "RES-0008",
+    "docs/promo/camp-workbench/camp-workbench-master-scene.png": "RES-0638",
+    "docs/promo/camp-workbench/camp-workbench-sheet-furniture.png": "RES-0639",
+    "docs/promo/camp-workbench/camp-workbench-sheet-props.png": "RES-0640",
+    "docs/promo/camp-workbench/camp-workbench-visual-bible.png": "RES-0641",
     "docs/promo/camp_grass_meadow.png": "RES-0009",
     "docs/promo/camp_grass_water_sheet.png": "RES-0010",
     "docs/promo/camp_props_sheet.png": "RES-0011",

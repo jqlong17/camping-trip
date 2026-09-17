@@ -9,7 +9,6 @@ function CampRender.bindHost(h)
 end
 
 function CampRender.drawPlayTop()
-  host.CampPreload.ensure()
   if host.uiFont then love.graphics.setFont(host.uiFont) end
   love.graphics.setColor(0.15, 0.18, 0.14)
   love.graphics.rectangle("fill", 0, 0, host.TOP_W, host.TOP_H)
@@ -23,6 +22,7 @@ function CampRender.drawPlayTop()
     host.CampTiles.drawCampGroundLayer(cols, rows)
   end
   if Destinations.currentId() == "coast" then
+    host.Assets.ensureCoastOcean(Time.index())
     local oceanOverlay = Time.index() == 1 and assets.coastOceanSunrise
       or (Time.index() == 4 and assets.coastOceanSunset)
     if oceanOverlay then

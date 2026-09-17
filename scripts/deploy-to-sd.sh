@@ -33,6 +33,7 @@ export COPYFILE_DISABLE=1
 
 # 1) LovePotion 3DS 会把 newImage("*.png") 映射到同名 *.t3x
 python3 "$ROOT/scripts/build-ocean-audio.py"
+python3 "$ROOT/scripts/build-creek-audio.py"
 python3 "$ROOT/scripts/build-camp-static-base.py"
 python3 "$ROOT/scripts/build-3ds-textures.py"
 

@@ -248,7 +248,7 @@ function D.start()
     h.drinkCoffee()
     return
   end
-  h.ensureRitual()
+  h.ensureRitual("drip")
   if dripped and cups >= D.CUPS_PER_POT then
     h.setPot(false, 0)
     D.taste = nil
@@ -300,28 +300,48 @@ function D.advance()
 end
 
 function D.loadChoiceAssets(bucket, loadImage)
+  bucket._loadImage = loadImage
+end
+
+function D.ensurePhaseAssets(bucket, phase)
+  if not bucket or not bucket._loadImage then return end
+  local load = bucket._loadImage
   local base = "assets/ritual/drip/"
-  bucket.drippers, bucket.beans, bucket.grinds, bucket.temps, bucket.pours = {}, {}, {}, {}, {}
-  bucket.paper = loadImage(base .. "drip_paper.png")
-  bucket.drip = {
-    loadImage(base .. "drip_1.png"),
-    loadImage(base .. "drip_2.png"),
-    loadImage(base .. "drip_3.png")
-  }
-  for _, d in ipairs(D.drippers) do
-    bucket.drippers[d.id] = loadImage(base .. "dripper_" .. d.id .. ".png")
+  if (not phase or phase.id == "paper") and not bucket.paper then
+    bucket.paper = load(base .. "drip_paper.png")
   end
-  for _, b in ipairs(D.beans) do
-    bucket.beans[b.id] = loadImage(base .. "bean_" .. b.id .. ".png")
+  if phase and phase.kind == "brew" and not (bucket.drip and bucket.drip[1]) then
+    bucket.drip = {
+      load(base .. "drip_1.png"),
+      load(base .. "drip_2.png"),
+      load(base .. "drip_3.png")
+    }
   end
-  for _, g in ipairs(D.grinds) do
-    bucket.grinds[g.id] = loadImage(base .. "grind_" .. g.id .. ".png")
-  end
-  for _, t in ipairs(D.temps) do
-    bucket.temps[tostring(t.c)] = loadImage(base .. "temp_" .. t.c .. ".png")
-  end
-  for _, n in ipairs(D.pours) do
-    bucket.pours[n] = loadImage(base .. "pours_" .. n .. ".png")
+  if phase and phase.assetBag == "beans" and not bucket.beans then
+    bucket.beans = {}
+    for _, bean in ipairs(D.beans) do
+      bucket.beans[bean.id] = load(base .. "bean_" .. bean.id .. ".png")
+    end
+  elseif phase and phase.assetBag == "grinds" and not bucket.grinds then
+    bucket.grinds = {}
+    for _, grind in ipairs(D.grinds) do
+      bucket.grinds[grind.id] = load(base .. "grind_" .. grind.id .. ".png")
+    end
+  elseif phase and phase.assetBag == "drippers" and not bucket.drippers then
+    bucket.drippers = {}
+    for _, dripper in ipairs(D.drippers) do
+      bucket.drippers[dripper.id] = load(base .. "dripper_" .. dripper.id .. ".png")
+    end
+  elseif phase and phase.assetBag == "temps" and not bucket.temps then
+    bucket.temps = {}
+    for _, temp in ipairs(D.temps) do
+      bucket.temps[tostring(temp.c)] = load(base .. "temp_" .. temp.c .. ".png")
+    end
+  elseif phase and phase.assetBag == "pours" and not bucket.pours then
+    bucket.pours = {}
+    for _, n in ipairs(D.pours) do
+      bucket.pours[n] = load(base .. "pours_" .. n .. ".png")
+    end
   end
 end
 
@@ -357,6 +377,7 @@ function D.topView(ritual, assets)
 end
 
 function D.drawTop(ritual, assets, ctx)
+  D.ensurePhaseAssets(assets, D.phaseById(ritual.phase or "bean"))
   love.graphics.setColor(0, 0, 0, 0.45)
   love.graphics.rectangle("fill", 0, 0, ctx.TOP_W, ctx.TOP_H)
   local title, img, mode, previewPath = D.topView(ritual, assets)
@@ -431,6 +452,7 @@ end
 function D.drawBottom(ritual, assets, ctx)
   local BOT_W = ctx.BOT_W
   local phase, idx = D.phaseById(ritual.phase or "brew")
+  D.ensurePhaseAssets(assets, phase)
   local head = "手冲"
   if phase then
     if phase.kind == "brew" then

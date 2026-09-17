@@ -105,9 +105,10 @@ title → prologue → cast(仅首次) → depart → play → homecoming → di
 - **禁止**把 CIA 放进 `sd:/3ds/CampingTrip/`（hbmenu 二次进入会 data abort）；CIA 只放 `cias/CampingTrip.cia`
 - 玩家可见名称不要再用拼音 `linjian`
 - 大图/分镜/走表按需加载；全屏 PNG 先 pad 到 2 的幂（`scripts/pad-pot-textures.py`）
-- 营地资源不要集中在 `goPlay()` / 按 A 回调里同步加载；当前用 `camp_preload` 在出发分镜期间按帧预热，避免「到了。先安顿下来吧。」之后黑屏式等待。真机日志应有 `camp_preload_begin reason=depart` 与 `ensureCamp done ... steps=20`
+- 营地资源不要集中在 `goPlay()` / 按 A 回调里同步加载；用 `camp_preload` 在出发分镜期间按帧预热。最后一页 A 未 ready 时只提示「正在抵达营地…」，禁止 `goPlay()` 里 `ensure()` 堵死。真机日志应有 `camp_preload_begin` 早于 `scene=play`，以及 `camp_preload_essential`（进营门槛）早于 `ensureCamp done`（含延后补图）
+- 真机出发预载 essential **不含** 鱼鸟虫、收获图标、展开帐篷高清图；这些进营后 `after()` 或搭帐时再读。桌面 playtest 仍全量 critter。禁止 `CampRender.drawPlayTop` 再调 `CampPreload.ensure()`，否则会把延后步骤一次堵死。play 场景也要继续 `runSlice`
 - 当前玩法节奏：咖啡一壶最多三口；夜里靠近篝火按 A 点火；时间自动推进，R/right shoulder 快进到下一天；右上角显示 `D? 时段`。X 不再是时间推进主路径
-- 3DS 可保留轻量鱼鸟虫：`critterFx` 独立于静态底图，真机 `static_play_fx` 仍加载鱼跃、小鸟、蝴蝶/蜻蜓/萤火虫。若再次卡顿，先减少 spawn/关闭 critterFx，不要回退离线底图和营地预热
+- 3DS 可保留轻量鱼鸟虫：`critterFx` 独立于静态底图，真机 `static_play_fx` 仍会画鱼鸟，但**不要放进出发 essential**。进营后再 `after()` 补；若再次卡顿，先减少 spawn/关闭 critterFx，不要回退离线底图和营地预热
 - LovePotion 3DS **没有** `Source:setPitch`（桌面 LÖVE 有）。真机 `playSfx` **不要 clone/setPitch/stop**。另外 `Source:stop()` 在 LovePotion 3DS 是高风险调用：公开 issue 记录了对未播放 Source 调用 `stop()` 会锁机，以及停止 stream 音乐会冻结游戏；真机短音效采用“正在播放则跳过、未播放则直接 `play`”策略。详见 [LovePotion #226](https://github.com/lovebrew/lovepotion/issues/226)、[#237](https://github.com/lovebrew/lovepotion/issues/237)、[#240](https://github.com/lovebrew/lovepotion/issues/240)、[#249](https://github.com/lovebrew/lovepotion/issues/249)。菜单一动红屏是旧坑；后半程 `3dsx_app` data abort 也可能是 clone 写坏指针
 - **CampingTrip CIA 已停用**：本机确认 Title `00040000004C4A00` 可让 HOME 菜单在 Luma 后黑屏。恢复：GodMode9 2.2.3（START 开机）→ HOME → Title manager → `[A:] SYSNAND SD` → 该 ID → Manage title → Uninstall title。日常只跑 `3ds/CampingTrip/CampingTrip.3dsx`；deploy 默认不得打包或复制旧 CIA。
 - **Titles 删了但桌面还是旧图标**：Homemenu 缓存，不是没删掉。须 **完全关机再开机**；装新 CIA 后再关一次机。系统设置 → 数据管理 → 3DS 软件 看一眼也会刷新。不要指望删完立刻变。
@@ -120,6 +121,12 @@ title → prologue → cast(仅首次) → depart → play → homecoming → di
 - 分镜/营地走色块 = `newImage` 失败。先读 `load_report.txt`，不要先猜「文件没拷上」。卡上有 PNG 仍可能解码失败或根目录其实是 `game/assets/`
 - `getSource()` 显示 `sdmc:/3ds/CampingTrip/game` 但 `getInfo("assets/...")` 全 nil：LovePotion 的默认虚拟挂载没暴露旁路资源。用 `mountFullPath("sdmc:/", "sdmc", "read", true)`，再读 `sdmc/3ds/CampingTrip/game/assets/...`。失败路径必须负缓存，否则 `ensureStory` 每帧重复 IO，图鉴会非常慢
 - **LovePotion 3DS 不直接加载 PNG**：`newImage("foo.png")` 在真机实际查找 `foo.t3x`；日志会明确报 `Could not open file foo.t3x`。每次 PNG 改动后必须跑 `python3 scripts/build-3ds-textures.py`（tex3ds 2.3.0，RGBA8888/LZ），deploy 自动执行；预检缺任一关键 T3X 必须 FAIL
+- **海边点手冲卡住**：`ensureRitual` 必须按 kind 懒加载（`ensureRitual("drip")`），禁止一次把茶/钓/杯/做饭全读进显存。下屏点装备应直接 `tryUseGear`，不要只 toast「选中」。真机证据：`Failed to create Texture!` 成片出现 + `maxDtMs` 数万毫秒 = 显存打满，不是缺文件。
+- **出发页按 A 卡十几秒**：禁止 `goPlay` 里 `CampPreload.ensure()` 一次读完。预载必须拆步；杯子/非当前海面层按需。最后一页用 `departPendingPlay` 等到 `camp_preload_essential` / `ready()` 再进营地。真机门槛不要再把鱼鸟虫、收获图标、展开帐篷算进 essential（DEV-124）。
+- **标题「继续」**：未 ready 时必须留在主菜单等预载，禁止 `goDepart()` 把人拽去出发页。
+- **日记上屏全黑**：进 homecoming/diary 前必须释放营地和仪式纹理。`diaryTop` 即使缺图也要先铺底色，书桌用 `drawStoryFrame`。
+- **林间近溪掉到十几帧**：`amb_creek` 禁止 MP3 stream。日志 `ambient_start kind=creek mode=stream` 后 `slow` 会占满窗口且停溪也不恢复。必须用 `amb_creek.wav` PCM static，与海浪同一策略。
+- **禁止** `love.graphics.rectangle(..., rx, ry)`：LovePotion 真机不吃圆角参数，做饭/品杯下屏会整段停绘，看起来像图标没加载。
 
 ## 性能与音频调查规则
 
